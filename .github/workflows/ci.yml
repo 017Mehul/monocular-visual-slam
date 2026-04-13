@@ -34,7 +34,7 @@ jobs:
         run: python -m compileall slam
 
       - name: Lint with ruff
-        run: ruff check .
+        run: ruff check . --fix
 
       - name: Run evaluation script
         run: python slam/kitti_evaluation.py --help
