@@ -1,0 +1,14 @@
+[project]
+name = "monocular-visual-slam"
+version = "0.1.0"
+description = "Monocular Visual SLAM implementation with KITTI evaluation"
+authors = [{name = "Mehul Gupta"}]
+dependencies = [
+    "numpy",
+    "opencv-python",
+    "matplotlib",
+]
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"

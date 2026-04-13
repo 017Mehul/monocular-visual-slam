@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="220" viewBox="0 0 560 220">
+  <rect width="100%" height="100%" fill="#fff"/>
+  <text x="16" y="28" font-family="Arial" font-size="14" fill="#0b1723">Monocular-visual-slam</text>
+  <text x="36" y="56" font-family="Arial" font-size="12" fill="#334155">├── slam/</text>
+  <text x="56" y="76" font-family="Arial" font-size="11" fill="#475569">├── main.py</text>
+  <text x="56" y="94" font-family="Arial" font-size="11" fill="#475569">├── pose_estimation.py</text>
+  <text x="56" y="112" font-family="Arial" font-size="11" fill="#475569">├── triangulation.py</text>
+  <text x="56" y="130" font-family="Arial" font-size="11" fill="#475569">├── loop_closure.py</text>
+  <text x="56" y="148" font-family="Arial" font-size="11" fill="#475569">└── visualization.py</text>
+  <text x="36" y="172" font-family="Arial" font-size="12" fill="#334155">├── dataset/</text>
+  <text x="36" y="190" font-family="Arial" font-size="12" fill="#334155">└── README.md</text>
+</svg>

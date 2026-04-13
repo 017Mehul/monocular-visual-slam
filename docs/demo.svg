@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="240" viewBox="0 0 480 240">
+  <rect width="100%" height="100%" fill="#0f1724"/>
+  <g transform="translate(20,20)">
+    <rect x="0" y="0" width="200" height="140" rx="6" fill="#071028" stroke="#1f6feb"/>
+    <rect x="260" y="0" width="200" height="140" rx="6" fill="#071028" stroke="#1f6feb"/>
+    <text x="10" y="18" fill="#cfe8ff" font-family="Arial" font-size="12">Frame t</text>
+    <text x="270" y="18" fill="#cfe8ff" font-family="Arial" font-size="12">Frame t+1</text>
+    <line x1="200" y1="70" x2="260" y2="70" stroke="#4fc3f7" stroke-width="2" stroke-dasharray="6 4"/>
+    <circle cx="110" cy="80" r="18" fill="#3ddc84" opacity="0.9"/>
+    <circle cx="350" cy="80" r="18" fill="#ffbd59" opacity="0.9"/>
+    <text x="100" y="84" fill="#012" font-family="Arial" font-size="10">ORB</text>
+    <text x="340" y="84" fill="#012" font-family="Arial" font-size="10">ORB</text>
+  </g>
+  <text x="16" y="220" fill="#d0d7de" font-family="Arial" font-size="13">Demo: frame matches → pose estimation → trajectory</text>
+</svg>
