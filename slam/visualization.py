@@ -121,7 +121,9 @@ class Visualizer:
                                "y-", lw=3, alpha=0.7, label="BA window")
             self.ax2d.legend(fontsize=8)
         self.ax3d.set_title("Sparse 3D Map")
-        self.ax3d.set_xlabel("X"); self.ax3d.set_ylabel("Y"); self.ax3d.set_zlabel("Z")
+        self.ax3d.set_xlabel("X")
+        self.ax3d.set_ylabel("Y")
+        self.ax3d.set_zlabel("Z")
         if len(cloud) > 0:
             c = self._filter_cloud(np.array(cloud))
             if len(c) > 0:
