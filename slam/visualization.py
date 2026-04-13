@@ -103,7 +103,8 @@ class Visualizer:
         self.ax2d.cla()
         self.ax3d.cla()
         self.ax2d.set_title("Trajectory (X-Z top-down)")
-        self.ax2d.set_xlabel("X"); self.ax2d.set_ylabel("Z")
+        self.ax2d.set_xlabel("X")
+self.ax2d.set_ylabel("Z")
         self.ax2d.grid(True)
         if len(traj) > 1:
             t = np.array(traj)
