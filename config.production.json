@@ -9,6 +9,7 @@
     "frame_resize_scale": 0.5,
     "max_map_points": 50000,
     "metrics_window": 60,
-    "max_frame_time_ms": 150.0
+    "max_frame_time_ms": 150,
+    "tracking_loss_limit": 3
   }
 }
