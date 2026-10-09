@@ -117,7 +117,9 @@ def open_source(source, width=None, height=None):
         return loader
     try:
         idx = int(source)
-        cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
+        cap = cv2.VideoCapture(idx)
+        if not cap.isOpened():
+            cap = cv2.VideoCapture(idx, cv2.CAP_DSHOW)
         if width:
             cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
         if height:
@@ -135,12 +137,12 @@ def open_source(source, width=None, height=None):
 
 
 def preprocess(frame, scale):
+    if scale != 1.0:
+        frame = cv2.resize(frame, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
     dist = np.asarray(CAMERA_PARAMS.get("dist", []), dtype=np.float64).ravel()
     if dist.size:
         K = np.array([[CAMERA_PARAMS["fx"], 0.0, CAMERA_PARAMS["cx"]], [0.0, CAMERA_PARAMS["fy"], CAMERA_PARAMS["cy"]], [0.0, 0.0, 1.0]], dtype=np.float64)
         frame = cv2.undistort(frame, K, dist)
-    if scale != 1.0:
-        frame = cv2.resize(frame, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
     return cv2.GaussianBlur(frame, (3, 3), 0)
 
 
