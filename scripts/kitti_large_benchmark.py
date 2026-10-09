@@ -75,7 +75,8 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps(summary, indent=2))
-    return 0 if passed else 2
+    failed = [r for r in results if r["status"] == "FAILED"]
+    return 0 if passed and not failed else 2
 
 if __name__ == "__main__":
     raise SystemExit(main())
