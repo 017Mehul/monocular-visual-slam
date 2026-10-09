@@ -19,6 +19,7 @@ def main():
     parser.add_argument("--min-tracking-rate", type=float, default=0.70)
     parser.add_argument("--min-fps", type=float, default=5.0)
     parser.add_argument("--max-slow-frame-rate", type=float, default=0.50)
+    parser.add_argument("--max-p95-frame-time-ms", type=float, default=150.0)
     args = parser.parse_args()
 
     from argparse import Namespace
@@ -43,6 +44,8 @@ def main():
     summary = run(run_args)
     metrics = summary["runtime_validation"]
     failures = []
+    if metrics["p95_frame_time_ms"] > args.max_p95_frame_time_ms:
+        failures.append("p95_frame_time_ms=%.2f > %.2f" % (metrics["p95_frame_time_ms"], args.max_p95_frame_time_ms))
     if metrics["tracking_success_rate"] < args.min_tracking_rate:
         failures.append(f"tracking_success_rate={metrics['tracking_success_rate']:.3f} < {args.min_tracking_rate:.3f}")
     if metrics["effective_fps"] < args.min_fps:
@@ -56,6 +59,7 @@ def main():
             "min_tracking_rate": args.min_tracking_rate,
             "min_fps": args.min_fps,
             "max_slow_frame_rate": args.max_slow_frame_rate,
+            "max_p95_frame_time_ms": args.max_p95_frame_time_ms,
         },
         "metrics": metrics,
         "failures": failures,
