@@ -67,22 +67,68 @@ class KeyframeManager:
         return [(kf.R, kf.t) for kf in self.keyframes]
 
     def build_observations(self):
-        """Return BA observations with local landmark indices.
+        """Build cross-keyframe BA observations using descriptor associations.
 
-        Each keyframe owns its landmark block, so point indices are guaranteed
-        to match the corresponding keypoints.
+        Each keyframe contributes its own landmarks to the global point vector.
+        The same landmark can then be observed by other keyframes when their
+        descriptors pass a ratio-tested Hamming match. This gives BA actual
+        multi-view constraints instead of optimizing independent points.
         """
         observations = []
         all_pts = []
+        blocks = []
         offset = 0
-        for cam_idx, kf in enumerate(self.keyframes):
+
+        for kf in self.keyframes:
+            n = len(kf.points_3d)
+            blocks.append((offset, n))
             all_pts.extend(kf.points_3d.tolist())
+            offset += n
+
+        pts_array = np.asarray(all_pts, dtype=np.float64).reshape(-1, 3)
+        if len(self.keyframes) == 0:
+            return [], pts_array
+
+        # Own-keyframe observations are exact by construction.
+        for cam_idx, kf in enumerate(self.keyframes):
+            base, n = blocks[cam_idx]
             for local_idx, u, v in kf.observations:
-                if local_idx < len(kf.points_3d):
-                    observations.append((cam_idx, offset + local_idx, u, v))
-            offset += len(kf.points_3d)
-        pts = np.asarray(all_pts, dtype=np.float64).reshape(-1, 3)
-        return observations, pts
+                if local_idx < n:
+                    observations.append((cam_idx, base + local_idx, u, v))
+
+        # Cross-keyframe associations: landmark descriptor -> observing frame.
+        import cv2
+        matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
+        seen = {(cam, pt) for cam, pt, _, _ in observations}
+
+        for src_idx, src_kf in enumerate(self.keyframes):
+            if src_kf.descriptors is None or len(src_kf.descriptors) == 0:
+                continue
+            src_base, src_n = blocks[src_idx]
+            src_n = min(src_n, len(src_kf.descriptors))
+            if src_n == 0:
+                continue
+
+            for cam_idx, dst_kf in enumerate(self.keyframes):
+                if cam_idx == src_idx or dst_kf.descriptors is None or len(dst_kf.descriptors) < 2:
+                    continue
+                raw = matcher.knnMatch(src_kf.descriptors[:src_n], dst_kf.descriptors, k=2)
+                for pair in raw:
+                    if len(pair) != 2:
+                        continue
+                    m, n = pair
+                    if m.distance >= 0.75 * n.distance:
+                        continue
+                    pt_idx = src_base + m.queryIdx
+                    key = (cam_idx, pt_idx)
+                    if key in seen:
+                        continue
+                    if m.trainIdx < len(dst_kf.keypoints):
+                        u, v = dst_kf.keypoints[m.trainIdx].pt
+                        observations.append((cam_idx, pt_idx, float(u), float(v)))
+                        seen.add(key)
+
+        return observations, pts_array
 
     def update_poses_from_ba(self, optimised_poses):
         for kf, (R, t) in zip(self.keyframes, optimised_poses):
