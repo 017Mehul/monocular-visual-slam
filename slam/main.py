@@ -63,7 +63,7 @@ def parse_args():
     parser.add_argument("--max-frames", type=int, default=None, help="Stop after processing this many frames")
     parser.add_argument("--config-file", type=str, default=None, help="JSON file containing CAMERA_PARAMS and/or PIPELINE_PARAMS overrides")
     parser.add_argument("--output-dir", type=str, default="outputs/latest_run", help="Directory for logs, summaries, and trajectories")
-    parser.add_argument("--save-trajectory", action="store_true", help="Write `trajectory_positions.csv` into the output directory")
+    parser.add_argument("--save-trajectory", action="store_true", help="Write trajectory positions and full poses into the output directory")
     parser.add_argument("--summary-json", action="store_true", help="Write `run_summary.json` into the output directory")
     parser.add_argument("--log-level", type=str, default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], help="Console and file log verbosity")
     parser.add_argument("--log-file", type=str, default=None, help="Optional explicit log file path. Defaults to <output-dir>/slam.log")
@@ -405,7 +405,8 @@ def run(args):
 
         if args.save_trajectory:
             trajectory.save_positions_csv(output_dir / "trajectory_positions.csv")
-            LOGGER.info("Saved trajectory to %s", output_dir / "trajectory_positions.csv")
+            trajectory.save_poses_csv(output_dir / "trajectory_poses.csv")
+            LOGGER.info("Saved trajectory positions and poses to %s", output_dir)
 
         if args.summary_json:
             summary_path = write_summary(output_dir, summary)
