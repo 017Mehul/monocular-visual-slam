@@ -2,6 +2,9 @@
 """
 # ── Camera intrinsics ─────────────────────────────────────────────────────────
 CAMERA_PARAMS = {
+    # Optional lens distortion coefficients [k1, k2, p1, p2, k3].
+    # Keep empty for an already-undistorted camera.
+    "dist": [],
     "fx": 718.856,
     "fy": 718.856,
     "cx": 607.1928,
@@ -42,6 +45,10 @@ LOOP_CLOSURE_PARAMS = {
 }
 
 PIPELINE_PARAMS = {
+    # Real-world runtime health thresholds.
+    "tracking_loss_limit": 3,
+    "max_frame_time_ms": 150.0,
+    "metrics_window": 60,
     "min_features": 200,
     "min_matches": 30,
     "min_inliers": 15,
