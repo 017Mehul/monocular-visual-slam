@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import statistics
 import time
 from collections import deque
 from pathlib import Path
@@ -47,13 +48,26 @@ class RuntimeMonitor:
     def tracking_rate(self):
         return self.tracked_frames / max(self.total_frames, 1)
 
+    @staticmethod
+    def _percentile(values, percentile):
+        if not values:
+            return 0.0
+        if len(values) == 1:
+            return float(values[0])
+        return float(statistics.quantiles(values, n=100, method="inclusive")[percentile - 1])
+
     def snapshot(self):
-        avg_ms = sum(self.frame_times_ms) / max(len(self.frame_times_ms), 1)
+        frame_times = list(self.frame_times_ms)
+        avg_ms = sum(frame_times) / max(len(frame_times), 1)
         return {
             "frames_observed": self.total_frames,
             "tracking_success_rate": round(self.tracking_rate, 4),
+            "tracking_failure_rate": round(self.failed_frames / max(self.total_frames, 1), 4),
             "effective_fps": round(self.effective_fps, 3),
             "avg_frame_time_ms": round(avg_ms, 3),
+            "p50_frame_time_ms": round(self._percentile(frame_times, 50), 3),
+            "p95_frame_time_ms": round(self._percentile(frame_times, 95), 3),
+            "p99_frame_time_ms": round(self._percentile(frame_times, 99), 3),
             "slow_frame_rate": round(self.slow_frames / max(self.total_frames, 1), 4),
             "avg_features": round(sum(self.features) / max(len(self.features), 1), 2),
             "avg_matches": round(sum(self.matches) / max(len(self.matches), 1), 2),
@@ -66,5 +80,6 @@ class RuntimeMonitor:
         report = self.snapshot()
         if extra:
             report.update(extra)
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
         Path(path).write_text(json.dumps(report, indent=2), encoding="utf-8")
         return report
