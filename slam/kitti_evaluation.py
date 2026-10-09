@@ -30,6 +30,27 @@ def read_kitti_poses(path: Path) -> np.ndarray:
     return poses
 
 
+def read_estimated_poses(path: Path) -> np.ndarray | None:
+    """Read full estimated camera-to-world poses if available."""
+    with open(path, "r", encoding="utf-8") as f:
+        first = f.readline()
+    try:
+        float(first.strip().split(",")[0])
+        skip = 0
+    except ValueError:
+        skip = 1
+    data = np.loadtxt(path, delimiter=",", skiprows=skip)
+    if data.ndim == 1:
+        data = data.reshape(1, -1)
+    if data.shape[1] == 13:
+        data = data[:, 1:]
+    elif data.shape[1] != 12:
+        return None
+    poses = np.eye(4)[None, :, :].repeat(len(data), axis=0)
+    poses[:, :3, :4] = data.reshape(-1, 3, 4)
+    return poses
+
+
 def read_positions(path: Path) -> np.ndarray:
     """Read estimated positions.
 
@@ -144,7 +165,7 @@ def poses_from_positions(positions: np.ndarray) -> np.ndarray:
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--gt", required=True, help="KITTI poses file (3x4 per line)")
-    p.add_argument("--est", required=True, help="Estimated trajectory (CSV frame_idx,x,y,z or Nx3)")
+    p.add_argument("--est", required=True, help="Estimated trajectory positions CSV or full pose CSV")
     p.add_argument("--rpe-delta", type=int, default=1, help="Frame delta for RPE (default=1)")
     args = p.parse_args()
 
@@ -153,17 +174,21 @@ def main():
 
     gt_poses = read_kitti_poses(gt_path)
     gt_positions = gt_poses[:, :3, 3]
-    est_positions = read_positions(est_path)
+    est_poses = read_estimated_poses(est_path)
+    if est_poses is not None:
+        est_positions = est_poses[:, :3, 3]
+    else:
+        est_positions = read_positions(est_path)
 
     ate = compute_ate(gt_positions, est_positions)
 
-    # Prepare poses for RPE: use identity rotations for est if only positions present
-    est_poses = poses_from_positions(est_positions)
-    rpe_trans, rpe_rot = compute_rpe(gt_poses, est_poses, delta=args.rpe_delta)
-
-    print(f"ATE (rmse) = {ate:.4f} m")
-    print(f"RPE translation (rmse, delta={args.rpe_delta}) = {rpe_trans:.4f} m")
-    print(f"RPE rotation (rmse, delta={args.rpe_delta}) = {rpe_rot:.4f} deg")
+    print(f"ATE (rmse, similarity aligned) = {ate:.4f} m")
+    if est_poses is not None:
+        rpe_trans, rpe_rot = compute_rpe(gt_poses, est_poses, delta=args.rpe_delta)
+        print(f"RPE translation (rmse, delta={args.rpe_delta}) = {rpe_trans:.4f} m")
+        print(f"RPE rotation (rmse, delta={args.rpe_delta}) = {rpe_rot:.4f} deg")
+    else:
+        print("RPE rotation = N/A (estimated file contains positions only)")
 
 
 if __name__ == "__main__":
