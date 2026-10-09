@@ -10,3 +10,5 @@ def test_runtime_monitor_tracks_health_metrics():
     assert report["tracking_success_rate"] == 0.5
     assert report["slow_frame_rate"] == 0.5
     assert report["avg_features"] == 200.0
+    assert report["p95_frame_time_ms"] >= 200.0
+    assert report["p99_frame_time_ms"] >= 200.0
