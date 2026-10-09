@@ -31,10 +31,10 @@ jobs:
           pip install ruff
 
       - name: Syntax check (compileall)
-        run: python -m compileall slam
+        run: python -m compileall slam scripts
 
       - name: Lint with ruff
-        run: ruff check . --fix --ignore E402
+        run: ruff check . --ignore E402
 
       - name: Run evaluation script
         run: python slam/kitti_evaluation.py --help
