@@ -309,28 +309,56 @@ def run(args):
 
             pts_prev_in, pts_curr_in = estimator.filter_inliers(pts_prev, pts_curr, inlier_mask)
 
-            scale = scale_est.estimate(prev_pts3d, None, r_mat, t_vec)
+            # Monocular geometry has an arbitrary scale. Keep a consistent
+            # internal scale unless an external metric cue is explicitly supplied.
+            scale = scale_est.estimate()
             t_scaled = t_vec * scale
 
+            previous_pose = trajectory.get_latest_pose()
             trajectory.update(r_mat, t_scaled)
-            r_world, t_world = trajectory.get_latest_Rt()
+            current_pose = trajectory.get_latest_pose()
+            R_prev_wc, t_prev_wc = trajectory.world_to_camera(previous_pose)
+            R_curr_wc, t_curr_wc = trajectory.world_to_camera(current_pose)
 
-            new_pts = tri.triangulate(r_world, t_world, np.eye(3), np.zeros((3, 1)), pts_prev_in, pts_curr_in)
-            map_mgr.add_points(new_pts)
-            prev_pts3d = new_pts if len(new_pts) > 0 else prev_pts3d
+            # Preserve the match-to-keypoint association through triangulation.
+            inlier_matches = [m for i, m in enumerate(matches) if inlier_mask[i]]
+            inlier_prev_kp = [prev_kp[m.queryIdx] for m in inlier_matches]
+            inlier_curr_kp = [curr_kp[m.trainIdx] for m in inlier_matches]
+            inlier_curr_desc = curr_desc[[m.trainIdx for m in inlier_matches]] if inlier_matches else None
+
+            new_pts, tri_mask = tri.triangulate(
+                R_prev_wc, t_prev_wc, R_curr_wc, t_curr_wc,
+                pts_prev_in, pts_curr_in, return_mask=True,
+            )
+            if len(new_pts) > 0:
+                map_mgr.add_points(new_pts)
+                inlier_curr_kp = [kp for kp, keep in zip(inlier_curr_kp, tri_mask) if keep]
+                inlier_prev_kp = [kp for kp, keep in zip(inlier_prev_kp, tri_mask) if keep]
+                if inlier_curr_desc is not None:
+                    inlier_curr_desc = inlier_curr_desc[tri_mask]
+                prev_pts3d = new_pts
             stats["map_pts"] = map_mgr.size()
 
             if kf_mgr.should_insert(frame_idx, r_mat, t_scaled, n_match, len(prev_kp)):
-                kf_mgr.insert(frame_idx, r_world, t_world, curr_kp, curr_desc, new_pts)
-                reloc.add_frame(frame_idx, curr_kp, curr_desc, new_pts, r_world, t_world)
-                kf_since_ba += 1
+                if len(new_pts) >= 4 and inlier_curr_desc is not None and len(inlier_curr_desc) == len(new_pts):
+                    kf_mgr.insert(frame_idx, R_curr_wc, t_curr_wc, inlier_curr_kp, inlier_curr_desc, new_pts)
+                    reloc.add_frame(frame_idx, inlier_curr_kp, inlier_curr_desc, new_pts, R_curr_wc, t_curr_wc)
+                    kf_since_ba += 1
 
-                if ba and kf_since_ba >= ba_every and kf_mgr.size() >= 3:
-                    observations, win_pts = kf_mgr.build_observations()
-                    if len(observations) >= 8 and len(win_pts) >= 4:
-                        opt_poses, _ = ba.adjust(kf_mgr.get_window_poses(), win_pts, observations)
-                        kf_mgr.update_poses_from_ba(opt_poses)
-                    kf_since_ba = 0
+                    if ba and kf_since_ba >= ba_every and kf_mgr.size() >= 3:
+                        observations, win_pts = kf_mgr.build_observations()
+                        if len(observations) >= 8 and len(win_pts) >= 4:
+                            opt_poses, opt_pts = ba.adjust(kf_mgr.get_window_poses(), win_pts, observations)
+                            kf_mgr.update_poses_from_ba(opt_poses)
+                            kf_mgr.update_points_from_ba(opt_pts)
+                            for kf, (R_opt, t_opt) in zip(kf_mgr.keyframes, opt_poses):
+                                if 0 <= kf.frame_idx < trajectory.length():
+                                    T = np.eye(4)
+                                    T[:3, :3] = R_opt
+                                    T[:3, 3] = np.asarray(t_opt).ravel()
+                                    trajectory.poses[kf.frame_idx] = T
+                            map_mgr.replace_points(kf_mgr.get_window_points())
+                        kf_since_ba = 0
 
             loop_det.register_keyframe(frame_idx, trajectory.length() - 1, curr_kp, curr_desc)
             if frame_idx % loop_every == 0:
