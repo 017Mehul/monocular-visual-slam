@@ -262,7 +262,9 @@ def run(args):
             if reloc.is_lost():
                 r_rel, t_rel, ok = reloc.relocalize(curr_kp, curr_desc)
                 if ok:
-                    trajectory.update(r_rel, t_rel)
+                    # PnP returns an absolute world-to-camera pose. Do not
+                    # compose it as if it were a frame-to-frame relative pose.
+                    trajectory.set_latest_world_to_camera(r_rel, t_rel)
                     prev_frame, prev_kp, prev_desc = frame, curr_kp, curr_desc
                     summary["relocalizations"] += 1
                     LOGGER.info("[%04d] Relocalization succeeded", frame_idx)
