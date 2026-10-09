@@ -2,6 +2,7 @@
 
 import cv2
 import numpy as np
+from slam.bow_loop_closure import BoWLoopClosure
 from slam.config import LOOP_CLOSURE_PARAMS, CAMERA_PARAMS, RANSAC_PARAMS
 
 
@@ -30,6 +31,7 @@ class LoopClosureDetector:
         self.min_matches = cfg["min_matches"]
         self.min_skip = cfg["min_skip_frames"]
         self._last_kf_idx = -self.min_interval
+        self.bow = BoWLoopClosure(words=cfg.get("bow_words", 256), min_interval=self.min_interval, min_skip_frames=self.min_skip)
         p = CAMERA_PARAMS
         self.K = np.array([[p["fx"], 0, p["cx"]], [0, p["fy"], p["cy"]], [0, 0, 1]], dtype=np.float64)
 
@@ -38,7 +40,9 @@ class LoopClosureDetector:
             return
         if frame_idx - self._last_kf_idx < self.min_interval:
             return
-        self.keyframes.append(Keyframe(frame_idx, pose_idx, keypoints, descriptors))
+        kf = Keyframe(frame_idx, pose_idx, keypoints, descriptors)
+        self.keyframes.append(kf)
+        self.bow.register(frame_idx, kf, descriptors)
         self._last_kf_idx = frame_idx
 
     def detect(self, frame_idx, keypoints, descriptors):
@@ -47,8 +51,12 @@ class LoopClosureDetector:
         candidates = [kf for kf in self.keyframes if frame_idx - kf.frame_idx > self.min_skip]
         if not candidates:
             return False, None, None, None
-        curr_mean = descriptors.astype(np.float32).mean(axis=0)
-        best_kf, best_sim = self._best_candidate(curr_mean, candidates)
+        bow_candidates = self.bow.query(frame_idx, descriptors, top_k=5)
+        if bow_candidates:
+            best_kf, best_sim = bow_candidates[0][1], bow_candidates[0][0]
+        else:
+            curr_mean = descriptors.astype(np.float32).mean(axis=0)
+            best_kf, best_sim = self._best_candidate(curr_mean, candidates)
         if best_kf is None or best_sim < self.sim_threshold:
             return False, None, None, None
         R, t, n_inliers = self._essential_verify(keypoints, descriptors, best_kf)
