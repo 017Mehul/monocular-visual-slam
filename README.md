@@ -185,7 +185,7 @@ When you run with `--summary-json` or `--save-trajectory`, the pipeline writes:
 
 - `slam.log`: structured runtime logs
 - `run_summary.json`: frame counts, loop closures, relocalizations, FPS estimate, map statistics
-- `runtime_metrics.json`: effective FPS, frame latency, tracking success rate, slow-frame rate and feature/match/inlier averages
+- `runtime_metrics.json`: effective FPS, P50/P95/P99 latency, tracking success/failure rate, slow-frame rate and feature/match/inlier averages
 - `trajectory_positions.csv`: per-frame camera positions
 - `trajectory_poses.csv`: full camera-to-world 3x4 poses for rotation-aware evaluation
 
@@ -231,7 +231,7 @@ The evaluator reports similarity-aligned ATE plus rotation-aware RPE when the fu
 ## Troubleshooting
 
 - **Black/empty Open3D window:** try updating GPU drivers, or run with `--no-viz` to confirm the rest of the pipeline works.
--- **Imports fail:** run via `python "slam/main.py"` (so local imports resolve).
+- **Imports fail:** run via `python "slam/main.py"` (so local imports resolve).
 - **Poor tracking / frequent relocalization:** calibrate intrinsics, reduce motion blur, increase scene texture, or lower `--scale`.
 - **Scale drift:** monocular SLAM cannot observe absolute metric scale from images alone; this project keeps an explicit internal scale of 1.0 unless an external metric cue is supplied.
 
@@ -245,9 +245,12 @@ A repeatable validation runner is included for a webcam or recorded video:
 
     python scripts/real_world_validation.py --source 0 --frames 300 --calibration slam/calibration_result.npz
 
+# Long-duration stability gate (recorded video or webcam)
+python scripts/stress_validation.py --source 0 --frames 3000 --calibration slam/calibration_result.npz
+
 It runs headless, disables bundle adjustment for a stable latency baseline, and writes runtime metrics, a validation report, trajectories, and the normal SLAM log/summary.
 
-The validation report checks configurable thresholds for tracking success rate, effective FPS and slow-frame rate. These are engineering health gates, not accuracy guarantees. For metric accuracy, use a measured reference trajectory or an external sensor.
+The validation report checks configurable thresholds for tracking success rate, effective FPS, slow-frame rate, and P95 frame latency. These are engineering health gates, not accuracy guarantees. For metric accuracy, use a measured reference trajectory or an external sensor.
 
 ## Current limitations and validation
 
@@ -258,9 +261,9 @@ Known limitations:
 - Monocular scale is inherently unobservable from images alone; the default internal scale is arbitrary. Metric scale requires an external cue such as IMU, wheel odometry, GNSS, known baseline, or another calibrated prior.
 - Loop detection uses a lightweight descriptor-similarity candidate stage plus Essential-matrix geometric verification; a BoW/learned place-recognition backend would be stronger for large environments.
 - KITTI evaluation is provided as an explicit offline step; dataset downloads and large benchmark sweeps are intentionally not part of CI.
-- Long-duration profiling and hardware-specific real-time validation still need to be performed on target machines.
+- Long-duration profiling and target-hardware real-time validation still need to be performed on target machines.
 
-The repository now includes unit coverage for coordinate-frame conversion, triangulation alignment, landmark/observation indexing, scale-policy behavior, and trajectory evaluation. CI runs syntax checks, linting, evaluation CLI validation, and pytest. Real-camera validation is intentionally a hardware-dependent run rather than a CI test.
+The repository now includes unit coverage for coordinate-frame conversion, triangulation alignment, landmark/observation indexing, scale-policy behavior, trajectory evaluation, and runtime latency metrics. Batch KITTI evaluation and long-duration stress validation are also provided as repeatable scripts. CI runs syntax checks, linting, evaluation CLI validation, and pytest. Real-camera validation is intentionally a hardware-dependent run rather than a CI test.
 
 For a real deployment, validate camera calibration, lighting/motion conditions, CPU/GPU load, memory growth, tracking-loss recovery, and trajectory drift on the target camera and hardware before relying on the output for navigation.
 
