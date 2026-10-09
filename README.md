@@ -8,7 +8,7 @@
 
 Real-time, modular **monocular visual SLAM** pipeline in Python using ORB features, RANSAC pose estimation, triangulation, local bundle adjustment, loop-closure correction, and relocalization. The runtime now includes production-oriented controls such as structured logging, headless execution, JSON-based config overrides, artifact export, and run summaries.
 
-> Status: production-oriented prototype. The runtime and operations story are significantly stronger now.
+> Status: research-grade prototype with corrected geometry, explicit monocular scale handling, cross-keyframe BA associations, relocalization, loop detection, automated unit tests, and reproducible evaluation tooling.
 
 > Note: True production-grade SLAM still requires several engineering and validation efforts:
 >
@@ -35,7 +35,7 @@ If you prefer raster images, replace the SVGs with `docs/demo.gif` and `docs/tra
 - ORB + CLAHE feature extraction
 - BFMatcher + Lowe ratio test + match deduplication
 - Essential matrix (RANSAC) -> relative pose `R, t`
-- Monocular scale recovery (median depth consistency)
+- Explicit monocular scale policy (no false metric-scale inference)
 - Keyframe-based sparse map management + pruning
 - Local bundle adjustment (SciPy least-squares, sparse Jacobian)
 - Loop closure detection + smooth pose-graph correction
@@ -106,7 +106,7 @@ Print a checkerboard and run:
 python slam/calibration.py --source 0 --rows 9 --cols 6 --n 20
 ```
 
-Copy the printed `CAMERA_PARAMS` into `slam/config.py`.
+Copy the printed `CAMERA_PARAMS` into `slam/config.py` or provide them through a JSON config override.
 
 If you skip calibration, the pipeline will still run, but tracking quality and scale will likely degrade.
 
@@ -147,7 +147,7 @@ From `slam/main.py`:
 - `--config-file`: load JSON overrides for `CAMERA_PARAMS` / `PIPELINE_PARAMS`
 - `--output-dir`: choose where logs and artifacts are written
 - `--summary-json`: emit `run_summary.json`
-- `--save-trajectory`: emit `trajectory_positions.csv`
+- `--save-trajectory`: emit `trajectory_positions.csv` and full-pose `trajectory_poses.csv`
 - `--max-frames`: stop automatically after a bounded number of frames
 - `--log-level`, `--log-file`: control observability
 
@@ -187,7 +187,7 @@ outputs/latest_run/
 
 - Use `dataset/dataset/sequences/<id>` as the `--source` (this folder contains `image_0/`).
 - If `calib.txt` exists in the sequence folder, it is auto-parsed and applied at runtime.
-- Ground-truth poses live in `dataset/dataset/poses/*.txt` (not consumed by the pipeline yet).
+- Ground-truth poses live in `dataset/dataset/poses/*.txt`; the evaluator consumes them separately so runtime code does not depend on ground truth.
 
 ## KITTI evaluation (ATE / RPE)
 
@@ -198,7 +198,7 @@ alignment (Umeyama) to account for monocular scale ambiguity before reporting AT
 Usage example:
 
 ```bash
-python slam/kitti_evaluation.py --gt dataset/dataset/poses/00.txt --est outputs/latest_run/trajectory_positions.csv
+python slam/kitti_evaluation.py --gt dataset/dataset/poses/00.txt --est outputs/latest_run/trajectory_poses.csv
 ```
 
 The script accepts KITTI-style pose files (3x4 per line) for `--gt` and either
@@ -228,24 +228,20 @@ Architecture overview:
 
 ![Architecture](docs/architecture.svg)
 
-## Production readiness
+## Current limitations and validation
 
-The repository is now closer to production operation because it supports:
+The core geometry and pipeline integration are implemented, but this remains a monocular research prototype rather than a safety-critical production SLAM stack.
 
-- reproducible config management
-- file-based logging
-- artifact export for later analysis
-- headless execution for automation and remote environments
-- bounded runs via `--max-frames`
+Known limitations:
 
-It is **still not fully production-grade SLAM** because the following are still missing:
+- Monocular scale is inherently unobservable from images alone; the default internal scale is arbitrary. Metric scale requires an external cue such as IMU, wheel odometry, GNSS, known baseline, or another calibrated prior.
+- Loop detection uses a lightweight descriptor-similarity candidate stage plus Essential-matrix geometric verification; a BoW/learned place-recognition backend would be stronger for large environments.
+- KITTI evaluation is provided as an explicit offline step; dataset downloads and large benchmark sweeps are intentionally not part of CI.
+- Long-duration profiling and hardware-specific real-time validation still need to be performed on target machines.
 
-- benchmark suite with ATE/RPE against KITTI ground truth
-- automated regression tests and CI coverage
-- long-duration soak testing and memory/latency profiling
-- stronger loop-closure/place-recognition backends
-- sensor fusion for metric scale and drift reduction
-- packaging/service deployment patterns beyond direct script execution
+The repository now includes unit coverage for coordinate-frame conversion, triangulation alignment, landmark/observation indexing, scale-policy behavior, and trajectory evaluation. CI runs syntax checks, linting, evaluation CLI validation, and pytest.
+
+For a real deployment, validate camera calibration, lighting/motion conditions, CPU/GPU load, memory growth, tracking-loss recovery, and trajectory drift on the target camera and hardware before relying on the output for navigation.
 
 ## Acknowledgements / references
 
