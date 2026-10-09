@@ -34,6 +34,17 @@ class Trajectory:
     def get_latest_pose(self):
         return self.poses[-1].copy()
 
+    def set_latest_world_to_camera(self, R_wc, t_wc):
+        """Replace the latest pose using an absolute world-to-camera estimate."""
+        R_wc = np.asarray(R_wc, dtype=np.float64).reshape(3, 3)
+        t_wc = np.asarray(t_wc, dtype=np.float64).reshape(3)
+        R_cw = R_wc.T
+        C_w = -R_cw @ t_wc
+        T = np.eye(4)
+        T[:3, :3] = R_cw
+        T[:3, 3] = C_w
+        self.poses[-1] = T
+
     def get_latest_Rt(self):
         return self.world_to_camera(self.poses[-1])
 
