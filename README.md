@@ -106,6 +106,14 @@ Print a checkerboard and run:
 python slam/calibration.py --source 0 --rows 9 --cols 6 --n 20
 ```
 
+The calibration tool also writes `slam/calibration_result.npz`. Use it directly at runtime:
+
+```bash
+python slam/main.py --source 0 --calibration slam/calibration_result.npz --summary-json --save-trajectory
+```
+
+The runtime undistorts frames using the measured lens distortion coefficients before feature extraction.
+
 Copy the printed `CAMERA_PARAMS` into `slam/config.py` or provide them through a JSON config override.
 
 If you skip calibration, the pipeline will still run, but tracking quality and scale will likely degrade.
@@ -145,6 +153,8 @@ From `slam/main.py`:
 - `--no-viz`: disable 3D plotting
 - `--headless`: disable all GUI windows for remote or batch execution
 - `--config-file`: load JSON overrides for `CAMERA_PARAMS` / `PIPELINE_PARAMS`
+- `--calibration`: load calibrated camera intrinsics/distortion from `.npz`
+- `--metrics-file`: choose the runtime health metrics JSON path
 - `--output-dir`: choose where logs and artifacts are written
 - `--summary-json`: emit `run_summary.json`
 - `--save-trajectory`: emit `trajectory_positions.csv` and full-pose `trajectory_poses.csv`
@@ -175,6 +185,7 @@ When you run with `--summary-json` or `--save-trajectory`, the pipeline writes:
 
 - `slam.log`: structured runtime logs
 - `run_summary.json`: frame counts, loop closures, relocalizations, FPS estimate, map statistics
+- `runtime_metrics.json`: effective FPS, frame latency, tracking success rate, slow-frame rate and feature/match/inlier averages
 - `trajectory_positions.csv`: per-frame camera positions
 
 Default output location:
@@ -227,6 +238,16 @@ Architecture overview:
 
 ![Architecture](docs/architecture.svg)
 
+## Real-world validation
+
+A repeatable validation runner is included for a webcam or recorded video:
+
+    python scripts/real_world_validation.py --source 0 --frames 300 --calibration slam/calibration_result.npz
+
+It runs headless, disables bundle adjustment for a stable latency baseline, and writes runtime metrics, a validation report, trajectories, and the normal SLAM log/summary.
+
+The validation report checks configurable thresholds for tracking success rate, effective FPS and slow-frame rate. These are engineering health gates, not accuracy guarantees. For metric accuracy, use a measured reference trajectory or an external sensor.
+
 ## Current limitations and validation
 
 The core geometry and pipeline integration are implemented, but this remains a monocular research prototype rather than a safety-critical production SLAM stack.
@@ -238,7 +259,7 @@ Known limitations:
 - KITTI evaluation is provided as an explicit offline step; dataset downloads and large benchmark sweeps are intentionally not part of CI.
 - Long-duration profiling and hardware-specific real-time validation still need to be performed on target machines.
 
-The repository now includes unit coverage for coordinate-frame conversion, triangulation alignment, landmark/observation indexing, scale-policy behavior, and trajectory evaluation. CI runs syntax checks, linting, evaluation CLI validation, and pytest.
+The repository now includes unit coverage for coordinate-frame conversion, triangulation alignment, landmark/observation indexing, scale-policy behavior, and trajectory evaluation. CI runs syntax checks, linting, evaluation CLI validation, and pytest. Real-camera validation is intentionally a hardware-dependent run rather than a CI test.
 
 For a real deployment, validate camera calibration, lighting/motion conditions, CPU/GPU load, memory growth, tracking-loss recovery, and trajectory drift on the target camera and hardware before relying on the output for navigation.
 
