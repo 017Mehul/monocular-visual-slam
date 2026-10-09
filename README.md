@@ -35,10 +35,10 @@ If you prefer raster images, replace the SVGs with `docs/demo.gif` and `docs/tra
 - ORB + CLAHE feature extraction
 - BFMatcher + Lowe ratio test + match deduplication
 - Essential matrix (RANSAC) -> relative pose `R, t`
-- Explicit monocular scale policy (no false metric-scale inference)
+- Explicit monocular scale policy with optional wheel/IMU/GNSS metric-scale adapter
 - Keyframe-based sparse map management + pruning
 - Local bundle adjustment (SciPy least-squares, sparse Jacobian)
-- Loop closure detection + smooth pose-graph correction
+- BoW/TF-IDF place recognition + Essential-matrix verification + smooth pose-graph correction
 - Lost tracking detection + PnP-based relocalization
 - Camera calibration utility (checkerboard)
 - Structured logging to console and file
@@ -258,6 +258,47 @@ It runs headless, disables bundle adjustment for a stable latency baseline, and 
 
 The validation report checks configurable thresholds for tracking success rate, effective FPS, slow-frame rate, and P95 frame latency. These are engineering health gates, not accuracy guarantees. For metric accuracy, use a measured reference trajectory or an external sensor.
 
+## Large-scale KITTI benchmark
+
+The repository includes a multi-sequence benchmark runner that executes the SLAM pipeline on every available KITTI odometry sequence with ground truth, then aggregates ATE/RPE metrics:
+
+```bash
+python scripts/kitti_large_benchmark.py --dataset-root dataset/dataset --sequences 00 01 02 03 04 05
+```
+
+For a quick smoke benchmark, cap each sequence:
+
+```bash
+python scripts/kitti_large_benchmark.py --dataset-root dataset/dataset --sequences 00 01 02 --frames 500
+```
+
+The resulting `benchmark_summary.json` records per-sequence status, sample count, ATE RMSE, translational RPE and rotational RPE. A non-zero exit status indicates that one or more requested sequences failed.
+
+## Advanced loop closure
+
+Loop closure now has a self-contained visual vocabulary and TF-IDF Bag-of-Words candidate index for ORB descriptors. It does not require native DBoW2 bindings, which keeps installation portable; the existing Essential-matrix RANSAC stage remains the geometric acceptance gate.
+
+The vocabulary size is configured with `LOOP_CLOSURE_PARAMS.bow_words` in `slam/config.py`.
+
+## Sensor-based metric scale
+
+Monocular vision alone cannot recover absolute metric scale. The runtime can consume synchronized external metric-motion samples from wheel odometry, an IMU-derived displacement estimate, GNSS, or another calibrated source:
+
+```text
+frame_idx,metric_translation_m
+100,0.12
+101,0.15
+102,0.18
+```
+
+Run with:
+
+```bash
+python slam/main.py --source 0 --metric-scale-csv sensor_motion.csv --calibration slam/calibration_result.npz
+```
+
+The `SensorScaleProvider` maintains a robust rolling median of metric/visual translation ratios and updates the monocular scale only when both measurements are valid. This is an integration adapter, not a claim that raw IMU/GNSS data are automatically synchronized or calibrated.
+
 ## Current limitations and validation
 
 The core geometry and pipeline integration are implemented, but this remains a monocular research prototype rather than a safety-critical production SLAM stack.
@@ -265,8 +306,8 @@ The core geometry and pipeline integration are implemented, but this remains a m
 Known limitations:
 
 - Monocular scale is inherently unobservable from images alone; the default internal scale is arbitrary. Metric scale requires an external cue such as IMU, wheel odometry, GNSS, known baseline, or another calibrated prior.
-- Loop detection uses a lightweight descriptor-similarity candidate stage plus Essential-matrix geometric verification; a BoW/learned place-recognition backend would be stronger for large environments.
-- KITTI evaluation is provided as an explicit offline step; dataset downloads and large benchmark sweeps are intentionally not part of CI.
+- BoW/TF-IDF place recognition is stronger than the original descriptor-mean candidate stage, but learned place recognition or a native DBoW2/ORB-SLAM vocabulary may still improve very large environments.
+- KITTI evaluation and multi-sequence benchmark sweeps are explicit offline steps; dataset downloads are intentionally not part of CI.
 - Long-duration profiling and target-hardware real-time validation still need to be performed on target machines.
 
 The repository now includes unit coverage for coordinate-frame conversion, triangulation alignment, landmark/observation indexing, scale-policy behavior, trajectory evaluation, and runtime latency metrics. Batch KITTI evaluation and long-duration stress validation are also provided as repeatable scripts. CI runs syntax checks, linting, evaluation CLI validation, and pytest. Real-camera validation is intentionally a hardware-dependent run rather than a CI test.
