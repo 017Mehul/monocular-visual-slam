@@ -64,3 +64,16 @@ class Trajectory:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         rows = np.column_stack([np.arange(len(positions)), positions])
         np.savetxt(out_path, rows, delimiter=",", header="frame_idx,x,y,z", comments="")
+
+    def save_poses_csv(self, path):
+        """Persist full camera-to-world poses for rotation-aware evaluation."""
+        out_path = Path(path)
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        rows = []
+        for i, T in enumerate(self.poses):
+            rows.append(np.concatenate([[i], T[:3, :4].reshape(-1)]))
+        np.savetxt(
+            out_path, np.asarray(rows), delimiter=",",
+            header="frame_idx," + ",".join(f"p{i}" for i in range(12)),
+            comments="",
+        )
