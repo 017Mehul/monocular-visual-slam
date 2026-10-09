@@ -144,6 +144,12 @@ class KeyframeManager:
                 kf.points_3d = pts[offset:offset + n].copy()
             offset += n
 
+    def get_window_points(self):
+        """Return all current local-window landmarks in BA ordering."""
+        if not self.keyframes:
+            return np.empty((0, 3), dtype=np.float64)
+        return np.vstack([kf.points_3d for kf in self.keyframes]).astype(np.float64, copy=False)
+
     def size(self):
         return len(self.keyframes)
 
