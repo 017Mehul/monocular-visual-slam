@@ -207,15 +207,14 @@ an `Nx3` positions file for `--est`.
 
 ## KITTI Evaluation
 
-Sequence: 00  
-Frames processed: 4540
+Run the evaluator against a freshly generated full-pose trajectory:
 
-| Metric | Value |
-|------|------|
-| ATE | 18.14 m |
-| RPE (trans., delta=1) | 0.74 m/frame |
+```bash
+python slam/main.py --source "dataset/dataset/sequences/00" --headless --save-trajectory --summary-json --output-dir outputs/kitti_00
+python slam/kitti_evaluation.py --gt dataset/dataset/poses/00.txt --est outputs/kitti_00/trajectory_poses.csv
+```
 
-![Trajectory](docs/kitti_trajectory.png)
+The evaluator reports similarity-aligned ATE plus rotation-aware RPE when the full pose CSV is supplied. The previously documented numeric result was produced before the geometry/association fixes and is intentionally no longer presented as a current benchmark.
 
 ## Troubleshooting
 
