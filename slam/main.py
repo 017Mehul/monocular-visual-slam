@@ -24,6 +24,7 @@ from slam.scale_estimator import ScaleEstimator
 from slam.trajectory import Trajectory
 from slam.triangulation import Triangulator
 from slam.visualization import Visualizer
+from slam.runtime_validation import RuntimeMonitor
 from slam.config import CAMERA_PARAMS, PIPELINE_PARAMS
 
 
@@ -62,6 +63,8 @@ def parse_args():
     parser.add_argument("--no-ba", action="store_true", help="Disable bundle adjustment for lower latency")
     parser.add_argument("--max-frames", type=int, default=None, help="Stop after processing this many frames")
     parser.add_argument("--config-file", type=str, default=None, help="JSON file containing CAMERA_PARAMS and/or PIPELINE_PARAMS overrides")
+    parser.add_argument("--calibration", type=str, default=None, help="Camera calibration .npz containing K and dist")
+    parser.add_argument("--metrics-file", type=str, default=None, help="Write real-world runtime health metrics JSON")
     parser.add_argument("--output-dir", type=str, default="outputs/latest_run", help="Directory for logs, summaries, and trajectories")
     parser.add_argument("--save-trajectory", action="store_true", help="Write trajectory positions and full poses into the output directory")
     parser.add_argument("--summary-json", action="store_true", help="Write `run_summary.json` into the output directory")
@@ -132,9 +135,31 @@ def open_source(source, width=None, height=None):
 
 
 def preprocess(frame, scale):
+    dist = np.asarray(CAMERA_PARAMS.get("dist", []), dtype=np.float64).ravel()
+    if dist.size:
+        K = np.array([[CAMERA_PARAMS["fx"], 0.0, CAMERA_PARAMS["cx"]], [0.0, CAMERA_PARAMS["fy"], CAMERA_PARAMS["cy"]], [0.0, 0.0, 1.0]], dtype=np.float64)
+        frame = cv2.undistort(frame, K, dist)
     if scale != 1.0:
         frame = cv2.resize(frame, (0, 0), fx=scale, fy=scale, interpolation=cv2.INTER_LINEAR)
     return cv2.GaussianBlur(frame, (3, 3), 0)
+
+
+def load_calibration_file(path_str: str | None):
+    if not path_str:
+        return
+    path = Path(path_str)
+    if not path.exists():
+        raise FileNotFoundError(f"Calibration file not found: {path}")
+    data = np.load(path)
+    if "K" not in data:
+        raise ValueError("Calibration file must contain K")
+    K = np.asarray(data["K"], dtype=np.float64)
+    if K.shape != (3, 3):
+        raise ValueError("Calibration K must be 3x3")
+    CAMERA_PARAMS.update({"fx": float(K[0, 0]), "fy": float(K[1, 1]), "cx": float(K[0, 2]), "cy": float(K[1, 2])})
+    if "dist" in data:
+        CAMERA_PARAMS["dist"] = np.asarray(data["dist"], dtype=np.float64).ravel().tolist()
+    LOGGER.info("Loaded camera calibration from %s", path)
 
 
 def scale_intrinsics(scale):
@@ -167,6 +192,7 @@ def run(args):
     log_file = Path(args.log_file) if args.log_file else output_dir / "slam.log"
     configure_logging(args.log_level, log_file)
     load_runtime_overrides(args.config_file)
+    load_calibration_file(args.calibration)
 
     if args.source is None:
         picked = pick_video_file()
@@ -181,7 +207,7 @@ def run(args):
 
     cap = None
     viz = None
-    summary = {"source": args.source, "scale": args.scale, "headless": args.headless, "bundle_adjustment": not args.no_ba, "output_dir": str(output_dir), "start_time_epoch": time.time(), "frames_processed": 0, "successful_tracking_frames": 0, "skipped_feature_frames": 0, "skipped_match_frames": 0, "skipped_inlier_frames": 0, "relocalizations": 0, "loop_closures": 0, "keyframes": 0, "final_map_points": 0, "total_map_points_added": 0, "avg_fps_estimate": 0.0}
+    summary = {"source": args.source, "scale": args.scale, "headless": args.headless, "bundle_adjustment": not args.no_ba, "output_dir": str(output_dir), "start_time_epoch": time.time(), "frames_processed": 0, "successful_tracking_frames": 0, "skipped_feature_frames": 0, "skipped_match_frames": 0, "skipped_inlier_frames": 0, "relocalizations": 0, "loop_closures": 0, "keyframes": 0, "final_map_points": 0, "total_map_points_added": 0, "avg_fps_estimate": 0.0, "runtime_validation": {}}
 
     try:
         cap = open_source(args.source, args.width, args.height)
@@ -197,6 +223,7 @@ def run(args):
         scale_est = ScaleEstimator()
         reloc = Relocalizer()
         ba = BundleAdjuster() if not args.no_ba else None
+        runtime_monitor = RuntimeMonitor(window_size=PIPELINE_PARAMS.get("metrics_window", 60), max_frame_time_ms=PIPELINE_PARAMS.get("max_frame_time_ms", 150.0))
         if not args.no_viz and not args.headless:
             viz = Visualizer()
 
@@ -251,6 +278,7 @@ def run(args):
 
             if curr_desc is None or n_feat < min_feat:
                 summary["skipped_feature_frames"] += 1
+                runtime_monitor.record(time.time() - t0, n_feat, 0, 0, False)
                 reloc.update_state(False)
                 LOGGER.warning("[%04d] Skipping frame: features=%d", frame_idx, n_feat)
                 show_frame(frame, viz, stats, display_enabled)
@@ -282,6 +310,7 @@ def run(args):
 
             if n_match < min_match:
                 summary["skipped_match_frames"] += 1
+                runtime_monitor.record(time.time() - t0, n_feat, n_match, 0, False)
                 reloc.update_state(False)
                 LOGGER.warning("[%04d] Skipping frame: matches=%d", frame_idx, n_match)
                 show_frame(frame, viz, stats, display_enabled)
@@ -300,6 +329,7 @@ def run(args):
             reloc.update_state(tracking_ok)
             if not tracking_ok:
                 summary["skipped_inlier_frames"] += 1
+                runtime_monitor.record(time.time() - t0, n_feat, n_match, n_inliers, False)
                 LOGGER.warning("[%04d] Skipping frame: inliers=%d", frame_idx, n_inliers)
                 show_frame(frame, viz, stats, display_enabled)
                 if should_quit(display_enabled):
@@ -375,6 +405,7 @@ def run(args):
             if frame_idx % prune_every == 0:
                 map_mgr.prune_outliers()
 
+            runtime_monitor.record(time.time() - t0, n_feat, n_match, n_inliers, tracking_ok)
             fps = 0.9 * fps + 0.1 / max(time.time() - t0, 1e-6)
             stats["fps"] = fps
             stats["ba_window"] = len(kf_mgr.get_window_poses()) if kf_mgr.size() > 0 else 0
@@ -399,6 +430,11 @@ def run(args):
             if should_quit(display_enabled):
                 LOGGER.info("User requested exit")
                 break
+
+        summary["runtime_validation"] = runtime_monitor.snapshot()
+        metrics_path = Path(args.metrics_file) if args.metrics_file else output_dir / "runtime_metrics.json"
+        runtime_monitor.write_json(metrics_path, {"source": args.source, "frames_processed": summary["frames_processed"], "relocalizations": summary["relocalizations"], "loop_closures": summary["loop_closures"]})
+        LOGGER.info("Saved runtime validation metrics to %s", metrics_path)
 
         summary["end_time_epoch"] = time.time()
         summary["duration_sec"] = round(summary["end_time_epoch"] - summary["start_time_epoch"], 3)
