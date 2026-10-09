@@ -228,6 +228,12 @@ python slam/kitti_evaluation.py --gt dataset/dataset/poses/00.txt --est outputs/
 
 The evaluator reports similarity-aligned ATE plus rotation-aware RPE when the full pose CSV is supplied. The previously documented numeric result was produced before the geometry/association fixes and is intentionally no longer presented as a current benchmark.
 
+For repeatable multi-run comparison, batch evaluation is available:
+
+```bash
+python scripts/kitti_batch_evaluation.py --gt dataset/dataset/poses/00.txt --est-dir outputs/ --pattern '**/trajectory_poses.csv' --output outputs/kitti_batch_metrics.json
+```
+
 ## Troubleshooting
 
 - **Black/empty Open3D window:** try updating GPU drivers, or run with `--no-viz` to confirm the rest of the pipeline works.
