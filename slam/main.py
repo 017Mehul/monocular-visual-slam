@@ -223,7 +223,7 @@ def run(args):
         trajectory = Trajectory()
         kf_mgr = KeyframeManager()
         scale_est = ScaleEstimator()
-        reloc = Relocalizer()
+        reloc = Relocalizer(lost_threshold=PIPELINE_PARAMS.get("tracking_loss_limit", 3))
         ba = BundleAdjuster() if not args.no_ba else None
         runtime_monitor = RuntimeMonitor(window_size=PIPELINE_PARAMS.get("metrics_window", 60), max_frame_time_ms=PIPELINE_PARAMS.get("max_frame_time_ms", 150.0))
         if not args.no_viz and not args.headless:
