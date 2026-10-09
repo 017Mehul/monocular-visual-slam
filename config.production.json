@@ -1,0 +1,14 @@
+{
+  "CAMERA_PARAMS": {
+    "dist": []
+  },
+  "PIPELINE_PARAMS": {
+    "min_features": 200,
+    "min_matches": 30,
+    "min_inliers": 15,
+    "frame_resize_scale": 0.5,
+    "max_map_points": 50000,
+    "metrics_window": 60,
+    "max_frame_time_ms": 150.0
+  }
+}
