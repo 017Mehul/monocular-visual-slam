@@ -1,14 +1,22 @@
 [project]
 name = "monocular-visual-slam"
-version = "0.1.0"
+version = "0.2.0"
 description = "Monocular Visual SLAM implementation with KITTI evaluation"
 authors = [{name = "Mehul Gupta"}]
+requires-python = ">=3.10"
 dependencies = [
-    "numpy",
-    "opencv-python",
-    "matplotlib",
+    "numpy>=1.26,<2",
+    "opencv-python>=4.8,<5",
+    "scipy>=1.11,<2",
+    "open3d>=0.19,<0.20",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8,<9",
+    "ruff>=0.6,<1",
 ]
 
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
