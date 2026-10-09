@@ -19,6 +19,7 @@ def main():
     p.add_argument("--min-tracking-rate", type=float, default=0.70)
     p.add_argument("--min-fps", type=float, default=5.0)
     p.add_argument("--max-slow-frame-rate", type=float, default=0.50)
+    p.add_argument("--max-p95-frame-time-ms", type=float, default=150.0)
     args = p.parse_args()
 
     out = Path(args.output_dir)
@@ -30,6 +31,7 @@ def main():
         "--min-tracking-rate", str(args.min_tracking_rate),
         "--min-fps", str(args.min_fps),
         "--max-slow-frame-rate", str(args.max_slow_frame_rate),
+        "--max-p95-frame-time-ms", str(args.max_p95_frame_time_ms),
     ]
     if args.calibration:
         cmd += ["--calibration", args.calibration]
