@@ -187,6 +187,7 @@ When you run with `--summary-json` or `--save-trajectory`, the pipeline writes:
 - `run_summary.json`: frame counts, loop closures, relocalizations, FPS estimate, map statistics
 - `runtime_metrics.json`: effective FPS, frame latency, tracking success rate, slow-frame rate and feature/match/inlier averages
 - `trajectory_positions.csv`: per-frame camera positions
+- `trajectory_poses.csv`: full camera-to-world 3x4 poses for rotation-aware evaluation
 
 Default output location:
 
@@ -232,7 +233,7 @@ The evaluator reports similarity-aligned ATE plus rotation-aware RPE when the fu
 - **Black/empty Open3D window:** try updating GPU drivers, or run with `--no-viz` to confirm the rest of the pipeline works.
 -- **Imports fail:** run via `python "slam/main.py"` (so local imports resolve).
 - **Poor tracking / frequent relocalization:** calibrate intrinsics, reduce motion blur, increase scene texture, or lower `--scale`.
-- **Scale drift:** monocular SLAM cannot observe absolute scale without additional sensors/cues; this project uses a heuristic scale estimator.
+- **Scale drift:** monocular SLAM cannot observe absolute metric scale from images alone; this project keeps an explicit internal scale of 1.0 unless an external metric cue is supplied.
 
 Architecture overview:
 
