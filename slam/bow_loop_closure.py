@@ -40,6 +40,7 @@ class BoWLoopClosure:
         self.min_skip_frames = min_skip_frames
         self.keyframes = []
         self.histograms = {}
+        self.raw_histograms = {}
         self.inverted = defaultdict(set)
         self._last_frame = -min_interval
 
@@ -71,10 +72,10 @@ class BoWLoopClosure:
 
     def _reindex(self):
         self.inverted = defaultdict(set)
-        for idx, hist in self.histograms.items():
+        for idx, hist in self.raw_histograms.items():
             for word in hist:
                 self.inverted[word].add(idx)
-        for idx, hist in list(self.histograms.items()):
+        for idx, hist in self.raw_histograms.items():
             self.histograms[idx] = self._tfidf(hist)
 
     def register(self, frame_idx, keyframe, descriptors):
@@ -87,7 +88,8 @@ class BoWLoopClosure:
         words = self.vocabulary.transform(descriptors)
         hist = self._normalize(words, self.vocabulary.words)
         self.keyframes.append((frame_idx, keyframe, descriptors))
-        self.histograms[len(self.keyframes) - 1] = hist
+        idx = len(self.keyframes) - 1
+        self.raw_histograms[idx] = hist
         self._reindex()
         self._last_frame = frame_idx
 
