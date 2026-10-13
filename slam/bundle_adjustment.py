@@ -116,6 +116,11 @@ class BundleAdjuster:
 			args=(n_cams, n_pts, cam_indices, pt_indices, obs_2d, self.K),
 			max_nfev=self.max_iter,
 			ftol=self.ftol,
+			# Descriptor-based cross-keyframe associations contain outliers. A
+			# robust loss prevents a few bad matches from dragging the whole local
+			# window and injecting large pose jumps into the trajectory.
+			loss="soft_l1",
+			f_scale=2.0,
 			verbose=0,
 		)
 
