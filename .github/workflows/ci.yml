@@ -37,7 +37,9 @@ jobs:
         run: python -m ruff check slam scripts tests --select E9,F63,F7,F82
 
       - name: Evaluation CLI smoke test
-        run: python slam/kitti_evaluation.py --help
+        run: |
+          python slam/kitti_evaluation.py --help
+          python scripts/kitti_large_benchmark.py --help
 
       - name: Unit tests
         run: python -m pytest -q
