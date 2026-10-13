@@ -34,3 +34,15 @@ def test_translation_gate_is_adaptive_to_consistently_fast_motion():
     )
     assert accepted
     assert error <= limit
+
+
+def test_translation_gate_scale_is_not_inflated_by_recent_outliers():
+    # A mostly one-unit trajectory with a few corrupt jumps must keep a small
+    # innovation threshold instead of adapting to the corrupt values.
+    x = np.array([0, 1, 2, 3, 4, 20, 21, 22, 45, 46, 47], dtype=float)
+    history = np.column_stack([x, np.zeros_like(x), np.zeros_like(x)])
+    accepted, error, limit = translation_update_is_plausible(
+        [48.0, 0.0, 0.0], [55.0, 0.0, 0.0], history
+    )
+    assert not accepted
+    assert error > limit
