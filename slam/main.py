@@ -435,7 +435,7 @@ def run(args):
             # Essential-matrix translation has unknown scale; PnP ties the
             # current pose to the existing map whenever enough correspondences
             # are available, while preserving VO as a safe fallback.
-            if args.no_map_pnp:
+            if getattr(args, "no_map_pnp", False):
                 pnp_R, pnp_t, pnp_inliers = None, None, 0
             else:
                 pnp_R, pnp_t, pnp_inliers = reloc.estimate_pose_from_map(
