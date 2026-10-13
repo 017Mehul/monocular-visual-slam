@@ -18,3 +18,14 @@ def test_keyframe_observations_keep_landmark_alignment():
     assert all_pts.shape == (4, 3)
     assert len(obs) == 4
     assert all(o[1] < len(all_pts) for o in obs)
+
+
+def test_keyframe_count_distinguishes_total_from_sliding_window():
+    mgr = KeyframeManager(min_frames=1, min_baseline=0.0, window_size=3)
+    desc = np.arange(4 * 32, dtype=np.uint8).reshape(4, 32)
+    pts = np.array([[1, 2, 8], [2, 3, 9], [3, 4, 10], [4, 5, 11]], dtype=float)
+    kps = [_kp(10, 20), _kp(20, 30), _kp(30, 40), _kp(40, 50)]
+    for frame_idx in range(1, 7):
+        mgr.insert(frame_idx, np.eye(3), np.array([[frame_idx], [0.0], [0.0]]), kps, desc, pts)
+    assert mgr.size() == 3
+    assert mgr.total_inserted == 6
