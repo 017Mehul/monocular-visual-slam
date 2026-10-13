@@ -32,12 +32,19 @@ def main():
     parser.add_argument("--min-separation-frames", type=int, default=100)
     parser.add_argument("--frame-stride", type=int, default=5)
     parser.add_argument("--words", type=int, default=LOOP_CLOSURE_PARAMS.get("bow_words", 256))
+    parser.add_argument(
+        "--vocabulary-training-frames", type=int, default=10,
+        help="Distinct startup views used to train the visual vocabulary",
+    )
     parser.add_argument("--similarity-threshold", type=float, default=LOOP_CLOSURE_PARAMS["similarity_threshold"])
     parser.add_argument("--max-frames", type=int, default=None)
     parser.add_argument("--max-descriptors-per-frame", type=int, default=800)
     args = parser.parse_args()
-    if args.revisit_radius_m <= 0 or args.min_separation_frames < 1 or args.frame_stride < 1 or args.words < 2 or args.max_descriptors_per_frame < 10:
-        parser.error("radius and words must be positive; frame separation and stride must be >= 1")
+    if (args.revisit_radius_m <= 0 or args.min_separation_frames < 1
+            or args.frame_stride < 1 or args.words < 2
+            or args.vocabulary_training_frames < 2
+            or args.max_descriptors_per_frame < 10):
+        parser.error("radius and words must be positive; frame separation, stride, and vocabulary training frames must be >= 1 (training frames >= 2)")
 
     sequence = Path(args.sequence)
     image_dir = sequence / "image_0"
@@ -53,7 +60,8 @@ def main():
 
     orb = cv2.ORB_create(nfeatures=3000)
     bow = BoWLoopClosure(words=args.words, min_interval=args.frame_stride,
-                         min_skip_frames=args.min_separation_frames)
+                         min_skip_frames=args.min_separation_frames,
+                         training_frames=args.vocabulary_training_frames)
     observations = []
     for frame_idx in range(0, count, args.frame_stride):
         image = cv2.imread(str(image_paths[frame_idx]), cv2.IMREAD_GRAYSCALE)

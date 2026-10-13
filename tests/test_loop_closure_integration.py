@@ -47,6 +47,7 @@ def test_loop_evaluation_recovers_known_synthetic_revisits(tmp_path, monkeypatch
             "--revisit-radius-m", "0.5",
             "--min-separation-frames", "3",
             "--frame-stride", "1",
+            "--vocabulary-training-frames", "2",
         ],
     )
 
