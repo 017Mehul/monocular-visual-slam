@@ -41,6 +41,19 @@ jobs:
           python slam/kitti_evaluation.py --help
           python scripts/kitti_large_benchmark.py --help
           python scripts/evaluate_loop_closure.py --help
+          python scripts/real_world_validation.py --help
+          python scripts/stress_validation.py --help
 
       - name: Unit tests
-        run: python -m pytest -q
+        run: |
+          mkdir -p outputs
+          python -m pytest -q --junitxml=outputs/pytest-report.xml
+
+      - name: Retain test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report-${{ github.run_id }}
+          path: outputs/pytest-report.xml
+          if-no-files-found: warn
+          retention-days: 30
