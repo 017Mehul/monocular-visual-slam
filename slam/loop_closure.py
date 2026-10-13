@@ -55,13 +55,17 @@ class LoopClosureDetector:
             # Do not silently fall back to descriptor-mean similarity: it is
             # not a reliable place-recognition score and can create false loops.
             return False, None, None, None
-        best_sim, best_kf = bow_candidates[0]
-        if best_kf is None or best_sim < self.sim_threshold:
-            return False, None, None, None
-        R, t, n_inliers = self._essential_verify(keypoints, descriptors, best_kf)
-        if n_inliers < self.min_matches:
-            return False, None, None, None
-        return True, best_kf, R, t
+        # BoW is a retrieval stage, not a final decision. A visually similar
+        # first candidate may fail geometric verification while another of the
+        # top-ranked candidates is the genuine revisit. Try the ranked shortlist
+        # in score order and accept only a geometrically verified candidate.
+        for similarity, candidate in bow_candidates:
+            if candidate is None or similarity < self.sim_threshold:
+                break
+            R, t, n_inliers = self._essential_verify(keypoints, descriptors, candidate)
+            if R is not None and t is not None and n_inliers >= self.min_matches:
+                return True, candidate, R, t
+        return False, None, None, None
 
     def compute_correction(self, current_pose, loop_pose):
         return np.asarray(loop_pose) @ np.linalg.inv(np.asarray(current_pose))
