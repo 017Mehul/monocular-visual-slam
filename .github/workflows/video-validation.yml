@@ -35,6 +35,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           import json
+          import subprocess
           root = Path("dataset/dataset")
           seq = root / "sequences" / "00"
           images = sorted((seq / "image_0").glob("*.png"))
@@ -42,6 +43,7 @@ jobs:
           if len(images) < 1500 or not poses.is_file() or not (seq / "calib.txt").is_file():
               raise SystemExit("KITTI sequence 00 is incomplete for sustained validation")
           manifest = {
+              "git_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
               "dataset": "KITTI Odometry sequence 00",
               "source_frame_count": len(images),
               "validation_frames": 1500,
