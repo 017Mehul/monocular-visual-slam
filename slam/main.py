@@ -228,6 +228,7 @@ def run(args):
         sensor_scale = SensorScaleProvider(window=20)
         metric_samples = load_metric_scale_csv(args.metric_scale_csv) if args.metric_scale_csv else {}
         last_tracking_frame_idx = 0
+        metric_samples_exhausted_warned = False
         reloc = Relocalizer(lost_threshold=PIPELINE_PARAMS.get("tracking_loss_limit", 3))
         ba = BundleAdjuster() if not args.no_ba else None
         runtime_monitor = RuntimeMonitor(window_size=PIPELINE_PARAMS.get("metrics_window", 60), max_frame_time_ms=PIPELINE_PARAMS.get("max_frame_time_ms", 150.0))
@@ -369,6 +370,12 @@ def run(args):
                         "[%04d] Metric scale sample is not aligned with consecutive tracked frames; ignoring",
                         frame_idx,
                     )
+                elif frame_idx > max(metric_samples) and not metric_samples_exhausted_warned:
+                    LOGGER.warning(
+                        "Metric scale CSV ended at frame %d; continuing with the last valid scale",
+                        max(metric_samples),
+                    )
+                    metric_samples_exhausted_warned = True
             last_tracking_frame_idx = frame_idx
             t_scaled = t_vec * scale
 
