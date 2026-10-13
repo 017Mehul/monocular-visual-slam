@@ -38,12 +38,17 @@ def recent_motion_scale(positions, window=20):
     steps = steps[np.isfinite(steps) & (steps > 1e-9)]
     if not len(steps):
         return 1.0
-    return float(np.median(steps))
+    # Pose updates can contaminate a plain median with repeated jumps. Estimate
+    # scale from the lower 60% of step lengths so isolated bad updates cannot
+    # inflate the next frame's acceptance threshold.
+    steps.sort()
+    retained = steps[:max(1, int(np.ceil(0.60 * len(steps))))]
+    return float(np.median(retained))
 
 
 def translation_update_is_plausible(reference_position, candidate_position,
-                                    recent_positions, max_median_steps=8.0,
-                                    absolute_floor=3.0):
+                                    recent_positions, max_median_steps=3.0,
+                                    absolute_floor=2.0):
     """Reject isolated pose jumps while adapting to the sequence's motion scale.
 
     The candidate is compared with the independent VO prediction, not simply
