@@ -92,8 +92,8 @@ def main():
         observations.append({
             "frame_idx": frame_idx,
             "candidate_frame_idx": candidate["frame_idx"] if candidate is not None else None,
-            "candidate_frame_ids": [item["frame_idx"] for score, item in eligible] if bow.vocabulary.centers is not None else [],
-            "candidate_scores": [float(score) for score, item in eligible] if bow.vocabulary.centers is not None else [],
+            "candidate_frame_ids": [item["frame_idx"] for score, item in ranked] if bow.vocabulary.centers is not None else [],
+            "candidate_scores": [float(score) for score, item in ranked] if bow.vocabulary.centers is not None else [],
             "score": float(best_score) if best_score is not None else None,
             "known_revisits": known_revisits,
         })
