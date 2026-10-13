@@ -39,11 +39,13 @@ def main():
     parser.add_argument("--similarity-threshold", type=float, default=LOOP_CLOSURE_PARAMS["similarity_threshold"])
     parser.add_argument("--max-frames", type=int, default=None)
     parser.add_argument("--max-descriptors-per-frame", type=int, default=800)
+    parser.add_argument("--retrieval-top-k", type=int, default=10,
+                        help="Number of ranked place-recognition candidates evaluated per query")
     args = parser.parse_args()
     if (args.revisit_radius_m <= 0 or args.min_separation_frames < 1
             or args.frame_stride < 1 or args.words < 2
             or args.vocabulary_training_frames < 2
-            or args.max_descriptors_per_frame < 10):
+            or args.max_descriptors_per_frame < 10 or args.retrieval_top_k < 1):
         parser.error("radius and words must be positive; frame separation, stride, and vocabulary training frames must be >= 1 (training frames >= 2)")
 
     sequence = Path(args.sequence)
@@ -75,7 +77,7 @@ def main():
         candidate = None
         best_score = None
         if bow.vocabulary.centers is not None:
-            # Evaluate the same top-5 retrieval shortlist used by the runtime
+            # Evaluate the same configurable top-k retrieval shortlist used by runtime
             # detector. A lower-ranked true revisit should not count as missed
             # solely because a stronger-looking distractor ranks first.
             ranked = bow.query(frame_idx, descriptors, top_k=5)
@@ -144,7 +146,7 @@ def main():
         **selected_metrics,
         "threshold_sweep": sweep,
         "retrieval_top_k": 5,
-        "protocol_note": "Ground-truth position proximity labels revisits. Precision/recall measure top-5 retrieval candidates; runtime still requires geometric verification, so this is not a full geometric loop-closure evaluation.",
+        "protocol_note": "Ground-truth position proximity labels revisits. Precision/recall measure the configured top-k retrieval shortlist; runtime still requires geometric verification, so this is not a full geometric loop-closure evaluation.",
     }
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
