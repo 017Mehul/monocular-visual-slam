@@ -40,6 +40,7 @@ jobs:
         run: |
           python slam/kitti_evaluation.py --help
           python scripts/kitti_large_benchmark.py --help
+          python scripts/evaluate_loop_closure.py --help
 
       - name: Unit tests
         run: python -m pytest -q
