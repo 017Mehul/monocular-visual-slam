@@ -42,7 +42,22 @@ def main():
         metrics_file=str(Path(args.output_dir) / "runtime_metrics.json"),
         metric_scale_csv=None,
     )
-    summary = run(run_args)
+    try:
+        summary = run(run_args)
+    except Exception as exc:
+        report = {
+            "status": "FAIL",
+            "source": args.source,
+            "frames_requested": args.frames,
+            "frames_processed": 0,
+            "metrics": None,
+            "failures": [f"SLAM run raised {type(exc).__name__}: {exc}"],
+        }
+        path = Path(args.output_dir) / "validation_report.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        print(json.dumps(report, indent=2))
+        return 2
     metrics = summary["runtime_validation"]
     failures = []
     actual_frames = int(summary.get("frames_processed", 0))
