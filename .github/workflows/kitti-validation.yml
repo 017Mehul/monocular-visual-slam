@@ -90,20 +90,20 @@ jobs:
           python scripts/kitti_large_benchmark.py \
             --dataset-root dataset/dataset \
             --sequences 01 \
-            --output-dir outputs/kitti_ablation_no_ba \
-            --no-ba
+            --output-dir outputs/kitti_ablation_with_ba \
+            --enable-ba
 
       - name: Evaluate loop-candidate precision and recall on revisiting sequences
         run: |
           python scripts/evaluate_loop_closure.py \
             --sequence dataset/dataset/sequences/00 \
             --ground-truth dataset/dataset/poses/00.txt \
-            --frame-stride 10 --min-separation-frames 100 --revisit-radius-m 5 \
+            --frame-stride 10 --min-separation-frames 100 --revisit-radius-m 5 --similarity-threshold 0.80 \
             --output outputs/loop_closure_00.json
           python scripts/evaluate_loop_closure.py \
             --sequence dataset/dataset/sequences/05 \
             --ground-truth dataset/dataset/poses/05.txt \
-            --frame-stride 10 --min-separation-frames 100 --revisit-radius-m 5 \
+            --frame-stride 10 --min-separation-frames 100 --revisit-radius-m 5 --similarity-threshold 0.80 \
             --output outputs/loop_closure_05.json
 
       - name: Compare trajectory with PnP disabled
@@ -159,7 +159,7 @@ jobs:
             outputs/kitti_dataset_manifest.json
             outputs/kitti_benchmark/
             outputs/kitti_ablation_no_loop/
-            outputs/kitti_ablation_no_ba/
+            outputs/kitti_ablation_with_ba/
             outputs/kitti_ablation_no_map_pnp/
             outputs/loop_closure_00.json
             outputs/loop_closure_05.json
