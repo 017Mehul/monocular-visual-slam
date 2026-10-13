@@ -30,3 +30,20 @@ def test_rpe_only_uses_adjacent_frame_ids():
     trans, rot = aligned_rpe(gt, est, ids, delta=1)
     assert trans == 0.0
     assert rot == 0.0
+
+
+def test_rpe_is_evaluated_after_monocular_global_scale_alignment():
+    from slam.kitti_evaluation import umeyama_alignment
+
+    gt = np.repeat(np.eye(4)[None, :, :], 3, axis=0)
+    est = gt.copy()
+    gt[:, 0, 3] = [0.0, 1.0, 2.0]
+    est[:, 0, 3] = [0.0, 2.0, 4.0]
+    scale, rotation, translation = umeyama_alignment(est[:, :3, 3], gt[:, :3, 3])
+    aligned = est.copy()
+    aligned[:, :3, 3] = (scale * (rotation @ est[:, :3, 3].T)).T + translation
+    aligned[:, :3, :3] = np.einsum("ij,njk->nik", rotation, est[:, :3, :3])
+
+    trans, rot = aligned_rpe(gt, aligned, [0, 1, 2], delta=1)
+    assert trans < 1e-10
+    assert rot < 1e-10
