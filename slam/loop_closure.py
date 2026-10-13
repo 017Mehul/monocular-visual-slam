@@ -68,9 +68,11 @@ class LoopClosureDetector:
         return np.asarray(loop_pose) @ np.linalg.inv(np.asarray(current_pose))
 
     def apply_smooth_correction(self, poses, from_idx, correction):
+        """Apply a smoothly varying world-frame correction and return per-pose transforms."""
         n = len(poses) - from_idx
         if n <= 0:
-            return
+            return {}
+        original_poses = {idx: np.asarray(poses[idx]).copy() for idx in range(from_idx, len(poses))}
         R_c = correction[:3, :3]
         t_c = correction[:3, 3]
         angle = np.arccos(np.clip((np.trace(R_c) - 1) / 2, -1, 1))
@@ -94,6 +96,10 @@ class LoopClosureDetector:
             T[:3, :3] = R_i
             T[:3, 3] = t_c * alpha
             poses[idx] = T @ poses[idx]
+        return {
+            idx: np.asarray(poses[idx]) @ np.linalg.inv(original_pose)
+            for idx, original_pose in original_poses.items()
+        }
 
     def _best_candidate(self, curr_mean, candidates):
         best_sim, best_kf = -1.0, None
