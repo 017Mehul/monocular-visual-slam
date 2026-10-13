@@ -69,7 +69,6 @@ class HttpRangeFile:
         end = min(self.size, start + self.block_size) - 1
         request = urllib.request.Request(self.url, headers={"Range": f"bytes={start}-{end}"})
         expected_bytes = end - start + 1
-        last_error = None
         # Large public archives occasionally reset a single range request.
         # Retry transient failures rather than aborting a 20+ GB scan at the
         # final blocks; validate every block before adding it to the cache.
@@ -89,7 +88,6 @@ class HttpRangeFile:
                     )
                 break
             except (urllib.error.URLError, TimeoutError, ConnectionResetError, OSError) as exc:
-                last_error = exc
                 if attempt == 4:
                     raise OSError(
                         f"Range download failed for {self.url} at byte {start} "
