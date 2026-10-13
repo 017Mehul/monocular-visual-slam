@@ -66,7 +66,8 @@ def parse_args():
     parser.add_argument("--height", type=int, default=None, help="Requested capture height")
     parser.add_argument("--no-viz", action="store_true", help="Disable 3D trajectory and map visualization")
     parser.add_argument("--headless", action="store_true", help="Disable all GUI windows and render loops")
-    parser.add_argument("--no-ba", action="store_true", help="Disable bundle adjustment for lower latency")
+    parser.add_argument("--no-ba", action="store_true", help="Compatibility flag: keep bundle adjustment disabled")
+    parser.add_argument("--enable-ba", action="store_true", help="Enable experimental local bundle adjustment; disabled by default until KITTI drift is resolved")
     parser.add_argument("--no-loop-closure", action="store_true", help="Disable loop-candidate detection/corrections for controlled ablation runs")
     parser.add_argument("--no-map-pnp", action="store_true", help="Disable local-map PnP refinement for controlled trajectory ablation")
     parser.add_argument("--max-frames", type=int, default=None, help="Stop after processing this many frames")
@@ -224,7 +225,7 @@ def run(args):
 
     cap = None
     viz = None
-    summary = {"source": args.source, "scale": args.scale, "headless": args.headless, "bundle_adjustment": not args.no_ba, "output_dir": str(output_dir), "start_time_epoch": time.time(), "frames_processed": 0, "successful_tracking_frames": 0, "skipped_feature_frames": 0, "skipped_match_frames": 0, "skipped_inlier_frames": 0, "relocalizations": 0, "loop_closures": 0, "keyframes": 0, "active_ba_keyframes": 0, "loop_database_keyframes": 0, "final_map_points": 0, "total_map_points_added": 0, "avg_fps_estimate": 0.0, "runtime_validation": {}}
+    summary = {"source": args.source, "scale": args.scale, "headless": args.headless, "bundle_adjustment": bool(args.enable_ba and not args.no_ba), "output_dir": str(output_dir), "start_time_epoch": time.time(), "frames_processed": 0, "successful_tracking_frames": 0, "skipped_feature_frames": 0, "skipped_match_frames": 0, "skipped_inlier_frames": 0, "relocalizations": 0, "loop_closures": 0, "keyframes": 0, "active_ba_keyframes": 0, "loop_database_keyframes": 0, "final_map_points": 0, "total_map_points_added": 0, "avg_fps_estimate": 0.0, "runtime_validation": {}}
 
     try:
         cap = open_source(args.source, args.width, args.height, scale=args.scale)
@@ -243,7 +244,7 @@ def run(args):
         last_tracking_frame_idx = 0
         metric_samples_exhausted_warned = False
         reloc = Relocalizer(lost_threshold=PIPELINE_PARAMS.get("tracking_loss_limit", 3))
-        ba = BundleAdjuster() if not args.no_ba else None
+        ba = BundleAdjuster() if args.enable_ba and not args.no_ba else None
         runtime_monitor = RuntimeMonitor(window_size=PIPELINE_PARAMS.get("metrics_window", 60), max_frame_time_ms=PIPELINE_PARAMS.get("max_frame_time_ms", 150.0))
         if not args.no_viz and not args.headless:
             viz = Visualizer()
