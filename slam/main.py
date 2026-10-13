@@ -608,13 +608,31 @@ def run(args):
                                 correction_by_pose = loop_det.apply_smooth_correction(
                                     trajectory.poses, kf.pose_idx + 1, correction
                                 )
-                                if not all(
+                                before_centers = np.asarray([pose[:3, 3] for pose in before_positions_to_poses])
+                                after_centers = trajectory.get_positions()
+                                before_steps = np.linalg.norm(np.diff(before_centers, axis=0), axis=1)
+                                after_steps = np.linalg.norm(np.diff(after_centers, axis=0), axis=1)
+                                positive_steps = before_steps[before_steps > 1e-9]
+                                typical_step = float(np.median(positive_steps)) if len(positive_steps) else 1.0
+                                allowed_steps = np.maximum(3.0, 10.0 * np.maximum(before_steps, 0.25 * typical_step))
+                                introduced_jumps = np.flatnonzero(
+                                    (after_steps > allowed_steps)
+                                    & (after_steps > 2.0 * before_steps + 1.0)
+                                )
+                                trajectory_valid = all(
                                     np.isfinite(pose).all()
                                     and is_valid_world_to_camera_pose(pose[:3, :3], pose[:3, 3])
                                     for pose in trajectory.poses
-                                ):
+                                )
+                                if not trajectory_valid or len(introduced_jumps):
                                     trajectory.poses[:] = before_positions_to_poses
-                                    LOGGER.error("[%04d] LOOP_UPDATE rollback: invalid corrected trajectory", frame_idx)
+                                    LOGGER.error(
+                                        "[%04d] LOOP_UPDATE rollback: valid=%s new_jump_edges=%s "
+                                        "before_steps=%s after_steps=%s",
+                                        frame_idx, trajectory_valid, introduced_jumps.tolist(),
+                                        np.round(before_steps[introduced_jumps], 4).tolist(),
+                                        np.round(after_steps[introduced_jumps], 4).tolist(),
+                                    )
                                 else:
                                     lc_frames.append(trajectory.length() - 1)
                                     frame_corrections = {
