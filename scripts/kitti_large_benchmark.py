@@ -11,7 +11,7 @@ from pathlib import Path
 
 import numpy as np
 
-from slam.kitti_evaluation import compute_ate, read_kitti_poses
+from slam.kitti_evaluation import compute_ate, read_kitti_poses, umeyama_alignment
 from slam.kitti_loader import load_kitti_calib
 
 
@@ -105,7 +105,22 @@ def run_sequence(sequence_dir, gt_file, output_dir, frames, thresholds):
     gt_aligned = np.asarray([gt_rows[idx] for idx in common_ids])
     est_aligned = np.asarray([est_rows[idx] for idx in common_ids])
     ate = compute_ate(gt_aligned[:, :3, 3], est_aligned[:, :3, 3])
-    rpe_t, rpe_r = aligned_rpe(gt_aligned, est_aligned, common_ids, delta=1)
+
+    # Monocular VO estimates translation only up to an arbitrary global scale.
+    # Align the estimated trajectory to ground truth once, then compute RPE on
+    # the aligned poses. Without this, a unit-norm translation from recoverPose
+    # is compared directly with metric KITTI displacement and inflates RPE.
+    scale, align_R, align_t = umeyama_alignment(
+        est_aligned[:, :3, 3], gt_aligned[:, :3, 3]
+    )
+    est_for_rpe = est_aligned.copy()
+    est_for_rpe[:, :3, 3] = (
+        scale * (align_R @ est_aligned[:, :3, 3].T)
+    ).T + align_t
+    est_for_rpe[:, :3, :3] = np.einsum(
+        "ij,njk->nik", align_R, est_aligned[:, :3, :3]
+    )
+    rpe_t, rpe_r = aligned_rpe(gt_aligned, est_for_rpe, common_ids, delta=1)
     if rpe_t is None:
         result.update({"completed": False, "accuracy_passed": None, "status": "FAILED",
                        "error": "no adjacent frame-ID pairs available for RPE"})
