@@ -44,6 +44,7 @@ class BoWLoopClosure:
         self.raw_histograms = {}
         self.inverted = defaultdict(set)
         self._last_frame = -min_interval
+        self._pending = []
 
     @staticmethod
     def _normalize(words, n_words):
@@ -79,20 +80,37 @@ class BoWLoopClosure:
         for idx, hist in self.raw_histograms.items():
             self.histograms[idx] = self._tfidf(hist)
 
-    def register(self, frame_idx, keyframe, descriptors):
-        if descriptors is None or len(descriptors) < 10 or frame_idx - self._last_frame < self.min_interval:
-            return
-        if self.vocabulary.centers is None and len(descriptors) >= self.vocabulary.words:
-            self.vocabulary.fit(np.asarray(descriptors, dtype=np.uint8))
-        if self.vocabulary.centers is None:
-            return
+    def _index_keyframe(self, frame_idx, keyframe, descriptors):
         words = self.vocabulary.transform(descriptors)
         hist = self._normalize(words, self.vocabulary.words)
         self.keyframes.append((frame_idx, keyframe, descriptors))
         idx = len(self.keyframes) - 1
         self.raw_histograms[idx] = hist
-        self._reindex()
         self._last_frame = frame_idx
+
+    def register(self, frame_idx, keyframe, descriptors):
+        if descriptors is None or len(descriptors) < 10 or frame_idx - self._last_frame < self.min_interval:
+            return
+        descriptors = np.asarray(descriptors, dtype=np.uint8)
+        if self.vocabulary.centers is None:
+            self._pending.append((frame_idx, keyframe, descriptors))
+            self._last_frame = frame_idx
+            # Fit on multiple views, not just the first frame. Cap each
+            # contribution to bound memory and k-means runtime.
+            if len(self._pending) < 2:
+                return
+            training = np.vstack([entry[2][:500] for entry in self._pending])
+            if len(training) < self.vocabulary.words:
+                return
+            self.vocabulary.fit(training)
+            if self.vocabulary.centers is None:
+                return
+            pending, self._pending = self._pending, []
+            for pending_frame, pending_keyframe, pending_desc in pending:
+                self._index_keyframe(pending_frame, pending_keyframe, pending_desc)
+        else:
+            self._index_keyframe(frame_idx, keyframe, descriptors)
+        self._reindex()
 
     def query(self, frame_idx, descriptors, top_k=5):
         if self.vocabulary.centers is None or descriptors is None or not self.keyframes:
