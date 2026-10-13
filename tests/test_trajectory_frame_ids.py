@@ -30,3 +30,16 @@ def test_bundle_adjustment_world_to_camera_pose_is_converted_to_camera_to_world(
     recovered_R, recovered_t = trajectory.world_to_camera(trajectory.poses[0])
     assert np.allclose(recovered_R, R_wc)
     assert np.allclose(recovered_t, t_wc)
+
+
+def test_relocalization_appends_pose_without_rewriting_previous_frame():
+    trajectory = Trajectory()
+    trajectory.update(np.eye(3), np.array([[1.0], [0.0], [0.0]]), frame_idx=1)
+    before = trajectory.get_latest_pose()
+    trajectory.append_world_to_camera(
+        np.eye(3), np.array([[-2.0], [0.0], [0.0]]), frame_idx=5
+    )
+
+    assert trajectory.frame_ids == [0, 1, 5]
+    assert np.array_equal(trajectory.poses[1], before)
+    assert np.allclose(trajectory.poses[2][:3, 3], [2.0, 0.0, 0.0])
