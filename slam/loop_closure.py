@@ -12,7 +12,6 @@ class Keyframe:
         self.pose_idx = pose_idx
         self.keypoints = keypoints
         self.descriptors = descriptors.astype(np.uint8)
-        self._mean = descriptors.astype(np.float32).mean(axis=0)
 
 
 class LoopClosureDetector:
@@ -52,11 +51,11 @@ class LoopClosureDetector:
         if not candidates:
             return False, None, None, None
         bow_candidates = self.bow.query(frame_idx, descriptors, top_k=5)
-        if bow_candidates:
-            best_kf, best_sim = bow_candidates[0][1], bow_candidates[0][0]
-        else:
-            curr_mean = descriptors.astype(np.float32).mean(axis=0)
-            best_kf, best_sim = self._best_candidate(curr_mean, candidates)
+        if not bow_candidates:
+            # Do not silently fall back to descriptor-mean similarity: it is
+            # not a reliable place-recognition score and can create false loops.
+            return False, None, None, None
+        best_sim, best_kf = bow_candidates[0]
         if best_kf is None or best_sim < self.sim_threshold:
             return False, None, None, None
         R, t, n_inliers = self._essential_verify(keypoints, descriptors, best_kf)
@@ -100,16 +99,6 @@ class LoopClosureDetector:
             idx: np.asarray(poses[idx]) @ np.linalg.inv(original_pose)
             for idx, original_pose in original_poses.items()
         }
-
-    def _best_candidate(self, curr_mean, candidates):
-        best_sim, best_kf = -1.0, None
-        curr_norm = np.linalg.norm(curr_mean)
-        for kf in candidates:
-            denom = curr_norm * np.linalg.norm(kf._mean)
-            sim = float(np.dot(curr_mean, kf._mean) / denom) if denom > 1e-8 else 0.0
-            if sim > best_sim:
-                best_sim, best_kf = sim, kf
-        return best_kf, best_sim
 
     def _essential_verify(self, kp_curr, desc_curr, kf):
         raw = self.matcher.knnMatch(desc_curr, kf.descriptors, k=2)
