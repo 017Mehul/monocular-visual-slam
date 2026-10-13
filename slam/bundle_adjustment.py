@@ -50,14 +50,32 @@ def _unpack(x, n_cams, n_pts):
 
 
 def _residuals(x, n_cams, n_pts, cam_indices, pt_indices, obs_2d, K):
+	"""Vectorized reprojection residuals; avoid Python work per observation."""
 	camera_params, points_3d = _unpack(x, n_cams, n_pts)
-	res = []
-	for cam_idx, pt_idx, obs in zip(cam_indices, pt_indices, obs_2d):
-		rvec = camera_params[cam_idx, :3]
-		tvec = camera_params[cam_idx, 3:]
-		proj = _project(K, rvec, tvec, points_3d[pt_idx])
-		res.extend(proj - obs)
-	return np.array(res)
+	if len(cam_indices) == 0:
+		return np.empty(0, dtype=np.float64)
+
+	# Convert each camera rotation once per evaluation rather than once for
+	# every landmark observation. BA can contain thousands of observations per
+	# window, so the scalar loop was a major avoidable runtime bottleneck.
+	rotations = np.stack([
+		_rodrigues_to_R(camera_params[i, :3]) for i in range(n_cams)
+	])
+	observed_cameras = camera_params[cam_indices]
+	camera_points = (
+		np.einsum("nij,nj->ni", rotations[cam_indices], points_3d[pt_indices])
+		+ observed_cameras[:, 3:]
+	)
+	z = camera_points[:, 2]
+	valid_depth = z >= 1e-6
+	safe_z = np.where(valid_depth, z, 1.0)
+	projected = np.column_stack((
+		K[0, 0] * camera_points[:, 0] / safe_z + K[0, 2],
+		K[1, 1] * camera_points[:, 1] / safe_z + K[1, 2],
+	))
+	# Match the scalar projector's convention for points behind the camera.
+	projected[~valid_depth] = 0.0
+	return (projected - np.asarray(obs_2d, dtype=np.float64)).ravel()
 
 
 def _build_sparsity(n_cams, n_pts, cam_indices, pt_indices):
