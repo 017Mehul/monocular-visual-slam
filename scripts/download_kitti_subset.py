@@ -8,6 +8,7 @@ are fetched from the small official KITTI odometry archives.
 from __future__ import annotations
 
 import argparse
+import http.client
 from collections import OrderedDict
 import os
 from pathlib import Path
@@ -87,7 +88,7 @@ class HttpRangeFile:
                         f"received {len(data)} of {expected_bytes} bytes"
                     )
                 break
-            except (urllib.error.URLError, TimeoutError, ConnectionResetError, OSError) as exc:
+            except (urllib.error.URLError, TimeoutError, ConnectionResetError, OSError, http.client.HTTPException, EOFError) as exc:
                 if attempt == 4:
                     raise OSError(
                         f"Range download failed for {self.url} at byte {start} "
