@@ -40,7 +40,7 @@ TRIANGULATION_PARAMS = {
 LOOP_CLOSURE_PARAMS = {
     "bow_words": 256,
     "min_keyframe_interval": 15,
-    "similarity_threshold": 0.85,
+    "similarity_threshold": 0.80,
     "min_matches": 40,
     "min_skip_frames": 40,
 }
