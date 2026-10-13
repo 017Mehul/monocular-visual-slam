@@ -6,6 +6,9 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/video-validation.yml"
+      - "slam/**"
+      - "scripts/real_world_validation.py"
+      - "config.production.json"
   workflow_dispatch:
 
 permissions:
