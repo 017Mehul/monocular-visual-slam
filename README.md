@@ -71,11 +71,13 @@ slam/
 scripts/
   kitti_batch_evaluation.py
   kitti_large_benchmark.py
+  evaluate_loop_closure.py
   real_world_validation.py
   stress_validation.py
 tests/
   test_sensor_scale.py
   test_bow_loop_closure.py
+  test_loop_closure_metrics.py
   test_kitti_large_benchmark.py
 config.production.json
 requirements.txt
@@ -295,7 +297,17 @@ The benchmark returns a non-zero exit code for execution failures, skipped reque
 
 Loop closure now has a self-contained visual vocabulary and TF-IDF Bag-of-Words candidate index for ORB descriptors. It does not require native DBoW2 bindings, which keeps installation portable; the existing Essential-matrix RANSAC stage remains the geometric acceptance gate.
 
-The vocabulary size is configured with `LOOP_CLOSURE_PARAMS["bow_words"]` in `slam/config.py`. This is a portable k-means vocabulary over float-converted ORB descriptors, not the native DBoW2 implementation. Geometric verification remains necessary, and precision/recall on a labelled revisit sequence has not been established by unit tests alone.
+The vocabulary size is configured with `LOOP_CLOSURE_PARAMS["bow_words"]` in `slam/config.py`. The portable vocabulary clusters unpacked ORB bits so the distance approximates Hamming distance; it is not the native DBoW2 implementation. Geometric verification remains necessary.
+
+Measure candidate retrieval against KITTI ground-truth position revisits (the sequence must actually contain revisits under the chosen radius/separation protocol):
+
+```bash
+python scripts/evaluate_loop_closure.py --sequence dataset/dataset/sequences/00 \
+  --ground-truth dataset/dataset/poses/00.txt --revisit-radius-m 5 \
+  --min-separation-frames 100 --output outputs/loop_closure_pr_00.json
+```
+
+This reports precision, recall, F1, and counts for top-ranked BoW candidates. Ground-truth proximity is a proxy label, so it is a retrieval diagnostic rather than proof of geometric loop-closure correctness. No real-sequence precision/recall result is claimed until this runner has been executed on the downloaded dataset.
 
 ## Sensor-based metric scale
 
