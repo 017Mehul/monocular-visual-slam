@@ -34,8 +34,9 @@ def main():
     parser.add_argument("--words", type=int, default=LOOP_CLOSURE_PARAMS.get("bow_words", 256))
     parser.add_argument("--similarity-threshold", type=float, default=LOOP_CLOSURE_PARAMS["similarity_threshold"])
     parser.add_argument("--max-frames", type=int, default=None)
+    parser.add_argument("--max-descriptors-per-frame", type=int, default=800)
     args = parser.parse_args()
-    if args.revisit_radius_m <= 0 or args.min_separation_frames < 1 or args.frame_stride < 1 or args.words < 2:
+    if args.revisit_radius_m <= 0 or args.min_separation_frames < 1 or args.frame_stride < 1 or args.words < 2 or args.max_descriptors_per_frame < 10:
         parser.error("radius and words must be positive; frame separation and stride must be >= 1")
 
     sequence = Path(args.sequence)
@@ -61,6 +62,7 @@ def main():
         _, descriptors = orb.detectAndCompute(image, None)
         if descriptors is None or len(descriptors) < 10:
             continue
+        descriptors = descriptors[:args.max_descriptors_per_frame]
 
         candidate = None
         if bow.vocabulary.centers is not None:
@@ -94,6 +96,7 @@ def main():
         "revisit_radius_m": args.revisit_radius_m,
         "min_separation_frames": args.min_separation_frames,
         "frame_stride": args.frame_stride,
+        "max_descriptors_per_frame": args.max_descriptors_per_frame,
         "similarity_threshold": args.similarity_threshold,
         "positive_revisit_queries": queries,
         **precision_recall(tp, fp, fn),
