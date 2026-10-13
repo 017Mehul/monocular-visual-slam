@@ -400,6 +400,7 @@ def run(args):
 
             previous_pose = trajectory.get_latest_pose()
             trajectory.update(r_mat, t_scaled, frame_idx=frame_idx)
+            predicted_pose = trajectory.get_latest_pose()
 
             # Refine the accumulated VO pose against recent 3D map landmarks.
             # Essential-matrix translation has unknown scale; PnP ties the
@@ -415,7 +416,7 @@ def run(args):
                 T_pnp_wc[:3, :3] = pnp_R
                 T_pnp_wc[:3, 3] = np.asarray(pnp_t).reshape(3)
                 pnp_pose_cw = np.linalg.inv(T_pnp_wc)
-                rotation_delta = pnp_pose_cw[:3, :3] @ current_pose[:3, :3].T
+                rotation_delta = pnp_pose_cw[:3, :3] @ predicted_pose[:3, :3].T
                 cos_delta = np.clip((np.trace(rotation_delta) - 1.0) / 2.0, -1.0, 1.0)
                 rotation_error_deg = float(np.degrees(np.arccos(cos_delta)))
                 if np.isfinite(rotation_error_deg) and rotation_error_deg <= 20.0:
