@@ -1,6 +1,7 @@
 import numpy as np
 
 from slam.pose_safeguards import (
+    bundle_adjustment_baselines_are_plausible,
     is_valid_rotation,
     is_valid_world_to_camera_pose,
     translation_update_is_plausible,
@@ -46,3 +47,25 @@ def test_translation_gate_scale_is_not_inflated_by_recent_outliers():
     )
     assert not accepted
     assert error > limit
+
+def test_bundle_adjustment_guard_rejects_isolated_baseline_warp():
+    before = np.array([20.0, 20.0, 20.0, 20.0])
+    after = np.array([20.0, 38.0, 20.0, 20.0])
+    accepted, bad_edges, deviation, tolerance = bundle_adjustment_baselines_are_plausible(
+        before, after, typical_step=1.0
+    )
+    assert not accepted
+    assert bad_edges.tolist() == [1]
+    assert deviation[1] == 18.0
+    assert tolerance[1] == 10.0
+
+
+def test_bundle_adjustment_guard_allows_small_refinement_and_fast_motion():
+    before = np.array([20.0, 25.0, 30.0])
+    after = np.array([21.0, 23.0, 32.0])
+    accepted, bad_edges, _, _ = bundle_adjustment_baselines_are_plausible(
+        before, after, typical_step=4.0
+    )
+    assert accepted
+    assert bad_edges.size == 0
+
