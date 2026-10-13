@@ -40,10 +40,14 @@ def main():
         log_level="INFO",
         log_file=None,
         metrics_file=str(Path(args.output_dir) / "runtime_metrics.json"),
+        metric_scale_csv=None,
     )
     summary = run(run_args)
     metrics = summary["runtime_validation"]
     failures = []
+    actual_frames = int(summary.get("frames_processed", 0))
+    if actual_frames < args.frames:
+        failures.append(f"frames_processed={actual_frames} < requested_frames={args.frames}")
     if metrics["p95_frame_time_ms"] > args.max_p95_frame_time_ms:
         failures.append("p95_frame_time_ms=%.2f > %.2f" % (metrics["p95_frame_time_ms"], args.max_p95_frame_time_ms))
     if metrics["tracking_success_rate"] < args.min_tracking_rate:
@@ -62,6 +66,10 @@ def main():
             "max_p95_frame_time_ms": args.max_p95_frame_time_ms,
         },
         "metrics": metrics,
+        "frames_requested": args.frames,
+        "frames_processed": actual_frames,
+        "duration_sec": summary.get("duration_sec"),
+        "source": args.source,
         "failures": failures,
     }
     path = Path(args.output_dir) / "validation_report.json"
