@@ -39,15 +39,15 @@ jobs:
           curl --fail --location --retry 3 --retry-delay 2 \
             https://download.ifi.uzh.ch/rpg/web/data/E2VID/datasets/driving_gen3/external_videos/street1.mp4 \
             --output outputs/input/street1.mp4
-          test -s outputs/input/vtest.avi
+          test -s outputs/input/street1.mp4
 
-      - name: Build repeatable 1,500-frame stress clip
+      - name: Build repeatable 1,501-frame stress clip
         run: |
           python - <<'PY'
           import cv2
           from pathlib import Path
 
-          source = Path("outputs/input/vtest.avi")
+          source = Path("outputs/input/street1.mp4")
           output = Path("outputs/input/street1_1501_frames.avi")
           target_frames = 1501
           capture = cv2.VideoCapture(str(source))
@@ -88,7 +88,7 @@ jobs:
       - name: Run sustained recorded-video validation
         run: |
           python scripts/real_world_validation.py \
-            --source outputs/input/vtest_1500_frames.avi \
+            --source outputs/input/street1_1501_frames.avi \
             --frames 1500 \
             --output-dir outputs/video_validation
 
@@ -99,6 +99,6 @@ jobs:
           name: recorded-video-validation-${{ github.run_id }}
           path: |
             outputs/video_validation/
-            outputs/input/vtest_1500_frames.avi
+            outputs/input/street1_1501_frames.avi
           if-no-files-found: warn
           retention-days: 30
