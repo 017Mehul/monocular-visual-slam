@@ -106,40 +106,17 @@ class Relocalizer:
     def estimate_pose_from_map(self, keypoints, descriptors, top_k=3):
         """Estimate an absolute world-to-camera pose from recent mapped landmarks.
 
-        Unlike essential-matrix VO, PnP uses already-triangulated 3D landmarks
-        and does not inject an independent unit-translation scale at every
-        frame. The caller should retain its relative-pose estimate as a fallback
-        whenever no candidate has enough geometrically verified inliers.
+        PnP ties the current pose to existing 3D map points; relative VO remains
+        the fallback when map support is insufficient.
         """
         if descriptors is None or len(self._db) == 0:
             return None, None, 0
-        best = (None, None, 0)
-        # Prefer recent local-map frames; these generally have better overlap
-        # and less accumulated drift than old place-recognition candidates.
+        best_R, best_t, best_count = None, None, 0
         for cand in reversed(self._db[-max(1, int(top_k)):]):
-            R, t, ok = self._pnp_verify(keypoints, descriptors, cand)
-            if ok:
-                # Re-run PnP with the inlier set to expose a robust inlier count.
-                good = self._good_matches(descriptors, cand.descriptors)
-                pts_2d, pts_3d = [], []
-                for match in good:
-                    if match.trainIdx < len(cand.points_3d) and match.queryIdx < len(keypoints):
-                        pts_2d.append(keypoints[match.queryIdx].pt)
-                        pts_3d.append(cand.points_3d[match.trainIdx])
-                if len(pts_3d) >= self.min_pnp_inliers:
-                    ok2, rvec, tvec, inliers = cv2.solvePnPRansac(
-                        np.asarray(pts_3d, dtype=np.float64),
-                        np.asarray(pts_2d, dtype=np.float64),
-                        self.K, None, iterationsCount=200,
-                        reprojectionError=3.0, confidence=0.99,
-                        flags=cv2.SOLVEPNP_ITERATIVE,
-                    )
-                    count = int(len(inliers)) if ok2 and inliers is not None else 0
-                    if count > best[2]:
-                        R2, _ = cv2.Rodrigues(rvec) if ok2 else (None, None)
-                        best = (R2, tvec.reshape(3, 1) if ok2 else None, count)
-        return best
-
+            R, t, count = self._pnp_pose(keypoints, descriptors, cand)
+            if count > best_count:
+                best_R, best_t, best_count = R, t, count
+        return best_R, best_t, best_count
     def relocalize(self, keypoints, descriptors):
         if descriptors is None or len(self._db) == 0:
             return None, None, False
@@ -192,27 +169,31 @@ class Relocalizer:
         ranked.sort(key=lambda item: item[0], reverse=True)
         return [rf for _, rf in ranked[:top_k]]
 
-    def _pnp_verify(self, kp_curr, desc_curr, cand: RelocFrame):
+    def _pnp_pose(self, kp_curr, desc_curr, cand: RelocFrame):
+        """Return an absolute world-to-camera pose and RANSAC inlier count."""
         good = self._good_matches(desc_curr, cand.descriptors)
         if len(good) < self.min_pnp_inliers:
-            return None, None, False
+            return None, None, 0
         pts_2d, pts_3d = [], []
         for match in good:
             if match.trainIdx < len(cand.points_3d) and match.queryIdx < len(kp_curr):
                 pts_2d.append(kp_curr[match.queryIdx].pt)
                 pts_3d.append(cand.points_3d[match.trainIdx])
         if len(pts_3d) < self.min_pnp_inliers:
-            return None, None, False
-        pts_2d = np.asarray(pts_2d, dtype=np.float64)
-        pts_3d = np.asarray(pts_3d, dtype=np.float64)
+            return None, None, 0
         ok, rvec, tvec, inliers = cv2.solvePnPRansac(
-            pts_3d, pts_2d, self.K, None,
-            iterationsCount=300,
-            reprojectionError=4.0,
-            confidence=0.99,
+            np.asarray(pts_3d, dtype=np.float64),
+            np.asarray(pts_2d, dtype=np.float64),
+            self.K, None, iterationsCount=200,
+            reprojectionError=3.0, confidence=0.99,
             flags=cv2.SOLVEPNP_ITERATIVE,
         )
-        if not ok or inliers is None or len(inliers) < self.min_pnp_inliers:
-            return None, None, False
+        count = int(len(inliers)) if ok and inliers is not None else 0
+        if count < self.min_pnp_inliers:
+            return None, None, 0
         R, _ = cv2.Rodrigues(rvec)
-        return R, tvec.reshape(3, 1), True
+        return R, tvec.reshape(3, 1), count
+
+    def _pnp_verify(self, kp_curr, desc_curr, cand: RelocFrame):
+        R, t, count = self._pnp_pose(kp_curr, desc_curr, cand)
+        return R, t, count >= self.min_pnp_inliers
