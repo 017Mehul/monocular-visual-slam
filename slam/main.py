@@ -305,6 +305,9 @@ def run(args):
                     summary["relocalizations"] += 1
                     LOGGER.info("[%04d] Relocalization succeeded", frame_idx)
                 else:
+                    # Count lost/relocalizing frames too; otherwise runtime
+                    # health metrics silently exclude the dominant failure mode.
+                    runtime_monitor.record(time.time() - t0, n_feat, 0, 0, False)
                     LOGGER.warning("[%04d] Relocalization still pending", frame_idx)
                     show_frame(frame, viz, stats, display_enabled)
                     if should_quit(display_enabled):
