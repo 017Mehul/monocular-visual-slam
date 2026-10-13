@@ -150,6 +150,27 @@ class KeyframeManager:
             return np.empty((0, 3), dtype=np.float64)
         return np.vstack([kf.points_3d for kf in self.keyframes]).astype(np.float64, copy=False)
 
+    def apply_world_corrections(self, corrections_by_frame_idx):
+        """Transform keyframe poses and their landmarks with matching world-frame corrections.
+
+        Each correction maps old world coordinates to corrected world coordinates:
+        T_cw_new = C @ T_cw_old, so T_wc_new = T_wc_old @ inv(C).
+        """
+        for kf in self.keyframes:
+            correction = corrections_by_frame_idx.get(kf.frame_idx)
+            if correction is None:
+                continue
+            C = np.asarray(correction, dtype=np.float64).reshape(4, 4)
+            T_wc = np.eye(4)
+            T_wc[:3, :3] = kf.R
+            T_wc[:3, 3] = kf.t.ravel()
+            T_wc_new = T_wc @ np.linalg.inv(C)
+            kf.R = T_wc_new[:3, :3].copy()
+            kf.t = T_wc_new[:3, 3].reshape(3, 1).copy()
+            if len(kf.points_3d):
+                homogeneous = np.column_stack([kf.points_3d, np.ones(len(kf.points_3d))])
+                kf.points_3d = (C @ homogeneous.T).T[:, :3]
+
     def size(self):
         return len(self.keyframes)
 
