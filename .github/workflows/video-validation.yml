@@ -99,6 +99,5 @@ jobs:
           name: recorded-video-validation-${{ github.run_id }}
           path: |
             outputs/video_validation/
-            outputs/input/street1_1501_frames.avi
           if-no-files-found: warn
           retention-days: 30
