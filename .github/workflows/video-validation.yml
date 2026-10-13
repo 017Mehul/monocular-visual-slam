@@ -1,14 +1,6 @@
 name: Recorded Video Stability Validation
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "slam/**"
-      - "scripts/real_world_validation.py"
-      - "scripts/stress_validation.py"
-      - ".github/workflows/video-validation.yml"
-      - "pyproject.toml"
   workflow_dispatch:
 
 permissions:
