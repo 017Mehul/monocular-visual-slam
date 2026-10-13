@@ -15,6 +15,7 @@ class Trajectory:
 
     def __init__(self):
         self.poses: list[np.ndarray] = [np.eye(4)]
+        self.frame_ids: list[int] = [0]
 
     @staticmethod
     def world_to_camera(T_cw: np.ndarray):
@@ -25,16 +26,17 @@ class Trajectory:
         t_wc = -R_wc @ C_w
         return R_wc, t_wc.reshape(3, 1)
 
-    def update(self, R_rel, t_rel):
+    def update(self, R_rel, t_rel, frame_idx=None):
         T_rel = np.eye(4)
         T_rel[:3, :3] = np.asarray(R_rel, dtype=np.float64).reshape(3, 3)
         T_rel[:3, 3] = np.asarray(t_rel, dtype=np.float64).ravel()
         self.poses.append(self.poses[-1] @ np.linalg.inv(T_rel))
+        self.frame_ids.append(int(frame_idx) if frame_idx is not None else self.frame_ids[-1] + 1)
 
     def get_latest_pose(self):
         return self.poses[-1].copy()
 
-    def set_latest_world_to_camera(self, R_wc, t_wc):
+    def set_latest_world_to_camera(self, R_wc, t_wc, frame_idx=None):
         """Replace the latest pose using an absolute world-to-camera estimate."""
         R_wc = np.asarray(R_wc, dtype=np.float64).reshape(3, 3)
         t_wc = np.asarray(t_wc, dtype=np.float64).reshape(3)
@@ -44,6 +46,8 @@ class Trajectory:
         T[:3, :3] = R_cw
         T[:3, 3] = C_w
         self.poses[-1] = T
+        if frame_idx is not None:
+            self.frame_ids[-1] = int(frame_idx)
 
     def get_latest_Rt(self):
         return self.world_to_camera(self.poses[-1])
@@ -62,7 +66,7 @@ class Trajectory:
         positions = self.get_positions()
         out_path = Path(path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
-        rows = np.column_stack([np.arange(len(positions)), positions])
+        rows = np.column_stack([self.frame_ids, positions])
         np.savetxt(out_path, rows, delimiter=",", header="frame_idx,x,y,z", comments="")
 
     def save_poses_csv(self, path):
@@ -70,8 +74,8 @@ class Trajectory:
         out_path = Path(path)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         rows = []
-        for i, T in enumerate(self.poses):
-            rows.append(np.concatenate([[i], T[:3, :4].reshape(-1)]))
+        for frame_idx, T in zip(self.frame_ids, self.poses):
+            rows.append(np.concatenate([[frame_idx], T[:3, :4].reshape(-1)]))
         np.savetxt(
             out_path, np.asarray(rows), delimiter=",",
             header="frame_idx," + ",".join(f"p{i}" for i in range(12)),
