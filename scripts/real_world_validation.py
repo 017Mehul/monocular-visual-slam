@@ -31,6 +31,7 @@ def main():
         no_viz=True,
         headless=True,
         no_ba=True,
+        no_loop_closure=False,
         max_frames=args.frames,
         config_file="config.production.json",
         calibration=args.calibration,
