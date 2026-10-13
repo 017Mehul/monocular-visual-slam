@@ -66,3 +66,31 @@ def translation_update_is_plausible(reference_position, candidate_position,
     scale = recent_motion_scale(recent_positions)
     limit = max(float(absolute_floor), float(max_median_steps) * scale)
     return bool(np.isfinite(error) and error <= limit), error, limit
+
+def bundle_adjustment_baselines_are_plausible(before_steps, after_steps,
+                                               typical_step,
+                                               absolute_floor=2.0,
+                                               max_fractional_change=0.5,
+                                               typical_motion_multiplier=3.0):
+    """Check that bundle adjustment does not introduce abrupt baseline changes.
+
+    The check is scale-adaptive: each optimized adjacent-keyframe baseline may
+    change by a bounded fraction of its pre-BA value, with a tolerance tied to
+    typical local motion. It detects local warps without enforcing a fixed
+    metric speed limit.
+    """
+    before = np.asarray(before_steps, dtype=np.float64).reshape(-1)
+    after = np.asarray(after_steps, dtype=np.float64).reshape(-1)
+    if before.shape != after.shape or not np.isfinite(before).all() or not np.isfinite(after).all():
+        return False, np.array([], dtype=int), np.abs(after - before), np.full_like(before, float(absolute_floor))
+    if np.any(before < 0.0) or np.any(after < 0.0) or not np.isfinite(typical_step) or typical_step < 0.0:
+        return False, np.array([], dtype=int), np.abs(after - before), np.full_like(before, float(absolute_floor))
+    allowed_deviation = np.maximum(
+        float(absolute_floor),
+        np.maximum(float(max_fractional_change) * before,
+                   float(typical_motion_multiplier) * float(typical_step)),
+    )
+    deviation = np.abs(after - before)
+    bad_edges = np.flatnonzero(deviation > allowed_deviation)
+    return len(bad_edges) == 0, bad_edges, deviation, allowed_deviation
+
