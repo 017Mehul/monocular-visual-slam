@@ -103,9 +103,19 @@ class Relocalizer:
         filtered out after abrupt motion or a short tracking failure.
         """
         ranked = []
+        query = np.asarray(descriptors, dtype=np.uint8)
+        # Cheap retrieval uses only the strongest ~256 ORB descriptors per
+        # image. Full descriptor sets are reserved for geometric PnP checks
+        # on the top candidates, avoiding O(database * all-features^2) work
+        # during every frame of a prolonged tracking-loss episode.
+        query_step = max(1, len(query) // 256)
+        query_sample = query[::query_step][:256]
         for rf in self._db:
-            good = self._good_matches(descriptors, rf.descriptors)
-            if len(good) >= self.min_pnp_inliers:
+            cand = rf.descriptors
+            cand_step = max(1, len(cand) // 256)
+            candidate_sample = cand[::cand_step][:256]
+            good = self._good_matches(query_sample, candidate_sample)
+            if len(good) >= min(self.min_pnp_inliers, 12):
                 ranked.append((len(good), rf))
         ranked.sort(key=lambda item: item[0], reverse=True)
         return [rf for _, rf in ranked[:top_k]]
