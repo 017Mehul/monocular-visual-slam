@@ -29,6 +29,7 @@ class LoopClosureDetector:
         self.sim_threshold = cfg["similarity_threshold"]
         self.min_matches = cfg["min_matches"]
         self.min_skip = cfg["min_skip_frames"]
+        self.candidate_top_k = int(cfg.get("candidate_top_k", 10))
         self._last_kf_idx = -self.min_interval
         self.bow = BoWLoopClosure(words=cfg.get("bow_words", 256), min_interval=self.min_interval, min_skip_frames=self.min_skip)
         p = CAMERA_PARAMS
@@ -50,7 +51,7 @@ class LoopClosureDetector:
         candidates = [kf for kf in self.keyframes if frame_idx - kf.frame_idx > self.min_skip]
         if not candidates:
             return False, None, None, None
-        bow_candidates = self.bow.query(frame_idx, descriptors, top_k=5)
+        bow_candidates = self.bow.query(frame_idx, descriptors, top_k=self.candidate_top_k)
         if not bow_candidates:
             # Do not silently fall back to descriptor-mean similarity: it is
             # not a reliable place-recognition score and can create false loops.
