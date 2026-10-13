@@ -147,6 +147,20 @@ def run_sequence(sequence_dir, gt_file, output_dir, frames, thresholds, no_ba=Fa
         checks["rpe_rotation_rmse_deg"] = rpe_r <= thresholds["max_rpe_rotation_rmse_deg"]
     accuracy_passed = all(checks.values()) if checks else None
     runtime_metrics = run_summary.get("runtime_validation", {})
+    runtime_checks = {}
+    if thresholds.get("min_tracking_success_rate") is not None:
+        rate = runtime_metrics.get("tracking_success_rate")
+        runtime_checks["tracking_success_rate"] = (
+            rate is not None and rate >= thresholds["min_tracking_success_rate"]
+        )
+    if thresholds.get("max_p95_frame_time_ms") is not None:
+        p95 = runtime_metrics.get("p95_frame_time_ms")
+        runtime_checks["p95_frame_time_ms"] = (
+            p95 is not None and p95 <= thresholds["max_p95_frame_time_ms"]
+        )
+    runtime_passed = all(runtime_checks.values()) if runtime_checks else None
+    if runtime_passed is False:
+        accuracy_passed = False
     result.update({
         "completed": True,
         "accuracy_passed": accuracy_passed,
@@ -167,6 +181,12 @@ def run_sequence(sequence_dir, gt_file, output_dir, frames, thresholds, no_ba=Fa
         "rpe_translation_rmse_m": rpe_t,
         "rpe_rotation_rmse_deg": rpe_r,
         "accuracy_checks": checks,
+        "runtime_checks": runtime_checks,
+        "runtime_passed": runtime_passed,
+        "avg_frame_time_ms": runtime_metrics.get("avg_frame_time_ms"),
+        "p95_frame_time_ms": runtime_metrics.get("p95_frame_time_ms"),
+        "p99_frame_time_ms": runtime_metrics.get("p99_frame_time_ms"),
+        "effective_fps": runtime_metrics.get("effective_fps"),
         "thresholds": thresholds,
     })
     return result
@@ -181,14 +201,20 @@ def main():
     p.add_argument("--max-ate-rmse-m", type=float, default=None)
     p.add_argument("--max-rpe-translation-rmse-m", type=float, default=None)
     p.add_argument("--max-rpe-rotation-rmse-deg", type=float, default=None)
+    p.add_argument("--min-tracking-success-rate", type=float, default=None,
+                   help="Fail if run tracking-success fraction is below this value")
+    p.add_argument("--max-p95-frame-time-ms", type=float, default=None,
+                   help="Fail if end-to-end P95 frame latency exceeds this value")
     p.add_argument("--fail-fast", action="store_true")
     p.add_argument("--no-ba", action="store_true", help="Disable bundle adjustment for an ablation run")
     p.add_argument("--no-loop-closure", action="store_true", help="Disable loop corrections for an ablation run")
     args = p.parse_args()
-    for name in ("max_ate_rmse_m", "max_rpe_translation_rmse_m", "max_rpe_rotation_rmse_deg"):
+    for name in ("max_ate_rmse_m", "max_rpe_translation_rmse_m", "max_rpe_rotation_rmse_deg", "max_p95_frame_time_ms"):
         value = getattr(args, name)
         if value is not None and value < 0:
             p.error(f"--{name.replace('_', '-')} must be non-negative")
+    if args.min_tracking_success_rate is not None and not 0.0 <= args.min_tracking_success_rate <= 1.0:
+        p.error("--min-tracking-success-rate must be between 0 and 1")
     root = Path(args.dataset_root)
     seq_root, pose_root = root / "sequences", root / "poses"
     if not seq_root.is_dir() or not pose_root.is_dir():
@@ -198,6 +224,8 @@ def main():
         "max_ate_rmse_m": args.max_ate_rmse_m,
         "max_rpe_translation_rmse_m": args.max_rpe_translation_rmse_m,
         "max_rpe_rotation_rmse_deg": args.max_rpe_rotation_rmse_deg,
+        "min_tracking_success_rate": args.min_tracking_success_rate,
+        "max_p95_frame_time_ms": args.max_p95_frame_time_ms,
     }
     results = []
     for seq in sequences:
