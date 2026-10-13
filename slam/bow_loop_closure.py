@@ -39,10 +39,15 @@ class BoWLoopClosure:
     It proposes visually similar keyframes; existing Essential-matrix
     verification remains the geometric acceptance gate.
     """
-    def __init__(self, words=256, min_interval=15, min_skip_frames=40):
+    def __init__(self, words=256, min_interval=15, min_skip_frames=40, training_frames=10):
+        if training_frames < 2:
+            raise ValueError("training_frames must be at least 2")
         self.vocabulary = BinaryVocabulary(words)
         self.min_interval = min_interval
         self.min_skip_frames = min_skip_frames
+        # Build a vocabulary from multiple viewpoints instead of fitting on
+        # only the first two frames, which biases the visual words to startup.
+        self.training_frames = int(training_frames)
         self.keyframes = []
         self.histograms = {}
         self.raw_histograms = {}
@@ -99,9 +104,9 @@ class BoWLoopClosure:
         if self.vocabulary.centers is None:
             self._pending.append((frame_idx, keyframe, descriptors))
             self._last_frame = frame_idx
-            # Fit on multiple views, not just the first frame. Cap each
+            # Wait for a varied set of views before fitting. Cap each frame's
             # contribution to bound memory and k-means runtime.
-            if len(self._pending) < 2:
+            if len(self._pending) < self.training_frames:
                 return
             training = np.vstack([entry[2][:500] for entry in self._pending])
             if len(training) < self.vocabulary.words:

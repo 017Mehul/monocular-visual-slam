@@ -116,6 +116,7 @@ def main():
         "min_separation_frames": args.min_separation_frames,
         "frame_stride": args.frame_stride,
         "max_descriptors_per_frame": args.max_descriptors_per_frame,
+        "vocabulary_training_frames": bow.training_frames,
         "similarity_threshold": args.similarity_threshold,
         **selected_metrics,
         "threshold_sweep": sweep,

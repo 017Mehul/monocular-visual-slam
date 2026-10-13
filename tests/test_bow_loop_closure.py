@@ -18,7 +18,7 @@ def test_vocabulary_trains_and_query_ranks_matching_keyframe_first():
     rng = np.random.default_rng(17)
     descriptors = rng.integers(0, 256, size=(96, 32), dtype=np.uint8)
     other = rng.integers(0, 256, size=(96, 32), dtype=np.uint8)
-    bow = BoWLoopClosure(words=16, min_interval=1, min_skip_frames=0)
+    bow = BoWLoopClosure(words=16, min_interval=1, min_skip_frames=0, training_frames=2)
     matching_keyframe = object()
     unrelated_keyframe = object()
 
@@ -31,3 +31,19 @@ def test_vocabulary_trains_and_query_ranks_matching_keyframe_first():
     assert len(results) == 2
     assert results[0][1] is matching_keyframe
     assert results[0][0] >= results[1][0]
+
+
+def test_default_vocabulary_waits_for_multiple_views():
+    rng = np.random.default_rng(23)
+    bow = BoWLoopClosure(words=16, min_interval=1, min_skip_frames=0)
+    for frame_idx in range(9):
+        descriptors = rng.integers(0, 256, size=(64, 32), dtype=np.uint8)
+        bow.register(frame_idx, object(), descriptors)
+    assert bow.vocabulary.centers is None
+    assert len(bow._pending) == 9
+
+    descriptors = rng.integers(0, 256, size=(64, 32), dtype=np.uint8)
+    bow.register(9, object(), descriptors)
+    assert bow.vocabulary.centers is not None
+    assert bow.vocabulary.centers.shape == (16, 256)
+    assert len(bow._pending) == 0
