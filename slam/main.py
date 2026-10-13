@@ -105,15 +105,21 @@ def ensure_output_dir(path_str: str) -> Path:
     return output_dir
 
 
-def open_source(source, width=None, height=None):
+def open_source(source, width=None, height=None, scale=1.0):
     if os.path.isdir(source) and os.path.isdir(os.path.join(source, "image_0")):
         loader = KITTILoader(source, camera="image_0")
         if not loader.isOpened():
             raise RuntimeError(f"No images found in {source}/image_0")
         try:
             calib = load_kitti_calib(source)
-            CAMERA_PARAMS.update(calib)
-            LOGGER.info("KITTI calibration loaded from %s (fx=%.2f, cx=%.2f, cy=%.2f)", source, calib["fx"], calib["cx"], calib["cy"])
+            # Images are resized before feature extraction, so their intrinsics
+            # must be resized by the same factor. Applying this after loading
+            # calibration avoids overwriting the scaled intrinsics.
+            calib_scaled = dict(calib)
+            for key in ("fx", "fy", "cx", "cy"):
+                calib_scaled[key] = float(calib_scaled[key]) * float(scale)
+            CAMERA_PARAMS.update(calib_scaled)
+            LOGGER.info("KITTI calibration loaded from %s (scaled fx=%.2f, cx=%.2f, cy=%.2f)", source, calib_scaled["fx"], calib_scaled["cx"], calib_scaled["cy"])
         except Exception as exc:
             LOGGER.warning("Could not load KITTI calib.txt: %s", exc)
         return loader
@@ -214,7 +220,7 @@ def run(args):
     summary = {"source": args.source, "scale": args.scale, "headless": args.headless, "bundle_adjustment": not args.no_ba, "output_dir": str(output_dir), "start_time_epoch": time.time(), "frames_processed": 0, "successful_tracking_frames": 0, "skipped_feature_frames": 0, "skipped_match_frames": 0, "skipped_inlier_frames": 0, "relocalizations": 0, "loop_closures": 0, "keyframes": 0, "final_map_points": 0, "total_map_points_added": 0, "avg_fps_estimate": 0.0, "runtime_validation": {}}
 
     try:
-        cap = open_source(args.source, args.width, args.height)
+        cap = open_source(args.source, args.width, args.height, scale=args.scale)
 
         extractor = FeatureExtractor()
         matcher = FeatureMatcher()
