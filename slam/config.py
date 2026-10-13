@@ -56,6 +56,6 @@ PIPELINE_PARAMS = {
     "frame_resize_scale": 0.5,
     "viz_every": 3,
     "prune_every": 60,
-    "loop_check_every": 10,
+    "loop_check_every": 30,
     "max_map_points": 50000,
 }
