@@ -30,6 +30,8 @@ def load_metric_scale_csv(path):
             if not np.isfinite(frame_value) or not frame_value.is_integer():
                 raise ValueError(f"frame_idx must be a finite integer on line {line_no}")
             frame_idx = int(frame_value)
+            if frame_idx < 0:
+                raise ValueError(f"frame_idx must be non-negative on line {line_no}")
             if frame_idx in samples:
                 raise ValueError(f"Duplicate frame_idx {frame_idx} on line {line_no}")
             if not np.isfinite(metric) or metric < 0:
