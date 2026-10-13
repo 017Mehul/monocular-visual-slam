@@ -16,7 +16,8 @@ class BinaryVocabulary:
     def fit(self, descriptors):
         if descriptors is None or len(descriptors) < max(2, self.words):
             return
-        data = np.asarray(descriptors, dtype=np.float32)
+        # Unpack ORB bytes into bits so Euclidean k-means approximates Hamming distance.
+        data = np.unpackbits(np.asarray(descriptors, dtype=np.uint8), axis=1).astype(np.float32)
         criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, self.iterations, 0.5)
         _, _, centers = cv2.kmeans(data, self.words, None, criteria, 3, cv2.KMEANS_PP_CENTERS)
         self.centers = centers.astype(np.float32)
@@ -24,7 +25,7 @@ class BinaryVocabulary:
     def transform(self, descriptors):
         if self.centers is None or descriptors is None or len(descriptors) == 0:
             return np.empty((0,), dtype=np.int32)
-        data = np.asarray(descriptors, dtype=np.float32)
+        data = np.unpackbits(np.asarray(descriptors, dtype=np.uint8), axis=1).astype(np.float32)
         distances = ((data[:, None, :] - self.centers[None, :, :]) ** 2).sum(axis=2)
         return np.argmin(distances, axis=1).astype(np.int32)
 
