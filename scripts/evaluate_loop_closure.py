@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 
 import cv2
@@ -77,12 +76,11 @@ def main():
         ]
         if known_revisits:
             queries += 1
-            if candidate is not None:
-                if candidate["frame_idx"] in known_revisits:
-                    tp += 1
-                else:
-                    fp += 1
+            if candidate is not None and candidate["frame_idx"] in known_revisits:
+                tp += 1
             else:
+                if candidate is not None:
+                    fp += 1
                 fn += 1
         elif candidate is not None:
             fp += 1
