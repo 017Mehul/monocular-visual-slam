@@ -406,6 +406,30 @@ def run(args):
             previous_pose = trajectory.get_latest_pose()
             trajectory.update(r_mat, t_scaled, frame_idx=frame_idx)
             predicted_pose = trajectory.get_latest_pose()
+            previous_positions = trajectory.get_positions()[:-1]
+            vo_pose_valid = all(np.isfinite(predicted_pose).ravel()) and is_valid_world_to_camera_pose(
+                *trajectory.world_to_camera(predicted_pose)
+            )
+            vo_plausible, vo_translation_step, vo_translation_limit = translation_update_is_plausible(
+                previous_pose[:3, 3], predicted_pose[:3, 3], previous_positions
+            )
+            if not vo_pose_valid or not vo_plausible:
+                LOGGER.warning(
+                    "[%04d] POSE_UPDATE source=VO rejected valid=%s "
+                    "translation_step=%.6f adaptive_limit=%.6f",
+                    frame_idx, vo_pose_valid, vo_translation_step, vo_translation_limit,
+                )
+                # Preserve the source frame ID but do not let a single bad
+                # relative-pose estimate poison every later accumulated pose.
+                trajectory.poses[-1] = previous_pose.copy()
+                predicted_pose = previous_pose.copy()
+            else:
+                LOGGER.debug(
+                    "[%04d] POSE_UPDATE source=VO accepted translation_step=%.6f "
+                    "adaptive_limit=%.6f center=%s",
+                    frame_idx, vo_translation_step, vo_translation_limit,
+                    np.round(predicted_pose[:3, 3], 4).tolist(),
+                )
 
             # Refine the accumulated VO pose against recent 3D map landmarks.
             # Essential-matrix translation has unknown scale; PnP ties the
