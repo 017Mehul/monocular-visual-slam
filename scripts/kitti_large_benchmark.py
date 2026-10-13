@@ -74,7 +74,7 @@ def run_sequence(sequence_dir, gt_file, output_dir, frames, thresholds, no_ba=Fa
                 "status": "FAILED", "error": f"invalid sequence calibration: {exc}"}
     cmd = [sys.executable, "slam/main.py", "--source", str(sequence_dir),
            "--headless", "--no-viz", "--save-trajectory", "--summary-json",
-           "--output-dir", str(output_dir)]
+           "--log-level", "DEBUG", "--output-dir", str(output_dir)]
     if frames is not None:
         cmd += ["--max-frames", str(frames)]
     if no_ba:
