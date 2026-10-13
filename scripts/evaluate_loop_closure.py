@@ -54,7 +54,7 @@ def main():
     orb = cv2.ORB_create(nfeatures=3000)
     bow = BoWLoopClosure(words=args.words, min_interval=args.frame_stride,
                          min_skip_frames=args.min_separation_frames)
-    tp = fp = fn = queries = 0
+    observations = []
     for frame_idx in range(0, count, args.frame_stride):
         image = cv2.imread(str(image_paths[frame_idx]), cv2.IMREAD_GRAYSCALE)
         if image is None:
@@ -65,10 +65,11 @@ def main():
         descriptors = descriptors[:args.max_descriptors_per_frame]
 
         candidate = None
+        best_score = None
         if bow.vocabulary.centers is not None:
             ranked = bow.query(frame_idx, descriptors, top_k=1)
-            if ranked and ranked[0][0] >= args.similarity_threshold:
-                candidate = ranked[0][1]
+            if ranked:
+                best_score, candidate = ranked[0]
 
         known_revisits = [
             previous_idx
@@ -76,19 +77,37 @@ def main():
             if frame_idx - previous_idx >= args.min_separation_frames
             and np.linalg.norm(gt[frame_idx, :3, 3] - gt[previous_idx, :3, 3]) <= args.revisit_radius_m
         ]
-        if known_revisits:
-            queries += 1
-            if candidate is not None and candidate["frame_idx"] in known_revisits:
-                tp += 1
-            else:
-                if candidate is not None:
-                    fp += 1
-                fn += 1
-        elif candidate is not None:
-            fp += 1
+        observations.append({
+            "frame_idx": frame_idx,
+            "candidate_frame_idx": candidate["frame_idx"] if candidate is not None else None,
+            "score": float(best_score) if best_score is not None else None,
+            "known_revisits": known_revisits,
+        })
 
         bow.register(frame_idx, {"frame_idx": frame_idx}, descriptors)
 
+    def metrics_at(threshold):
+        tp = fp = fn = queries = 0
+        for observation in observations:
+            candidate_frame = observation["candidate_frame_idx"]
+            score = observation["score"]
+            accepted = candidate_frame is not None and score is not None and score >= threshold
+            known = observation["known_revisits"]
+            if known:
+                queries += 1
+                if accepted and candidate_frame in known:
+                    tp += 1
+                else:
+                    if accepted:
+                        fp += 1
+                    fn += 1
+            elif accepted:
+                fp += 1
+        return {"threshold": threshold, "positive_revisit_queries": queries,
+                **precision_recall(tp, fp, fn)}
+
+    selected_metrics = metrics_at(args.similarity_threshold)
+    sweep = [metrics_at(value) for value in (0.50, 0.60, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95)]
     result = {
         "sequence": sequence.name,
         "frames_considered": count,
@@ -98,8 +117,8 @@ def main():
         "frame_stride": args.frame_stride,
         "max_descriptors_per_frame": args.max_descriptors_per_frame,
         "similarity_threshold": args.similarity_threshold,
-        "positive_revisit_queries": queries,
-        **precision_recall(tp, fp, fn),
+        **selected_metrics,
+        "threshold_sweep": sweep,
         "protocol_note": "Ground-truth position proximity labels revisits; this is a candidate-retrieval diagnostic, not a full geometric loop-closure evaluation.",
     }
     output = Path(args.output)
