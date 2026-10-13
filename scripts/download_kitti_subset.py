@@ -12,6 +12,7 @@ from collections import OrderedDict
 import os
 from pathlib import Path
 import shutil
+import time
 import urllib.error
 import urllib.request
 import zipfile
@@ -67,16 +68,40 @@ class HttpRangeFile:
         start = block_index * self.block_size
         end = min(self.size, start + self.block_size) - 1
         request = urllib.request.Request(self.url, headers={"Range": f"bytes={start}-{end}"})
-        try:
-            with urllib.request.urlopen(request, timeout=120) as response:
-                if response.status != 206:
-                    raise OSError(f"Range request returned HTTP {response.status}, expected 206")
-                content_range = response.headers.get("Content-Range", "")
-                if not content_range.startswith(f"bytes {start}-"):
-                    raise OSError(f"Unexpected Content-Range: {content_range}")
-                data = response.read()
-        except urllib.error.URLError as exc:
-            raise OSError(f"Range download failed for {self.url} at byte {start}: {exc}") from exc
+        expected_bytes = end - start + 1
+        last_error = None
+        # Large public archives occasionally reset a single range request.
+        # Retry transient failures rather than aborting a 20+ GB scan at the
+        # final blocks; validate every block before adding it to the cache.
+        for attempt in range(5):
+            try:
+                with urllib.request.urlopen(request, timeout=120) as response:
+                    if response.status != 206:
+                        raise OSError(f"Range request returned HTTP {response.status}, expected 206")
+                    content_range = response.headers.get("Content-Range", "")
+                    if not content_range.startswith(f"bytes {start}-"):
+                        raise OSError(f"Unexpected Content-Range: {content_range}")
+                    data = response.read()
+                if len(data) != expected_bytes:
+                    raise OSError(
+                        f"Short range response at byte {start}: "
+                        f"received {len(data)} of {expected_bytes} bytes"
+                    )
+                break
+            except (urllib.error.URLError, TimeoutError, ConnectionResetError, OSError) as exc:
+                last_error = exc
+                if attempt == 4:
+                    raise OSError(
+                        f"Range download failed for {self.url} at byte {start} "
+                        f"after 5 attempts: {exc}"
+                    ) from exc
+                delay = min(2 ** attempt, 16)
+                print(
+                    f"Range request at byte {start} failed (attempt {attempt + 1}/5): "
+                    f"{exc}; retrying in {delay}s",
+                    flush=True,
+                )
+                time.sleep(delay)
         self.cache[block_index] = data
         while len(self.cache) > self.cache_blocks:
             self.cache.popitem(last=False)
