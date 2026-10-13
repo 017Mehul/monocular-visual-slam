@@ -77,6 +77,8 @@ tests/
   test_bow_loop_closure.py
   test_loop_closure_metrics.py
   test_kitti_large_benchmark.py
+  test_trajectory_frame_ids.py
+  test_loop_correction_consistency.py
 config.production.json
 requirements.txt
 dataset/
