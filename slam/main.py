@@ -27,6 +27,7 @@ from slam.triangulation import Triangulator
 from slam.visualization import Visualizer
 from slam.runtime_validation import RuntimeMonitor
 from slam.pose_safeguards import (
+    bundle_adjustment_baselines_are_plausible,
     is_valid_world_to_camera_pose,
     translation_update_is_plausible,
 )
@@ -544,13 +545,12 @@ def run(args):
                                 # keyframe baseline by an order of magnitude. Compare the
                                 # absolute baseline change against a robust tolerance tied to
                                 # the pre-BA baseline and typical local motion.
-                                allowed_deviation = np.maximum(
-                                    2.0,
-                                    np.maximum(0.5 * before_steps, 3.0 * typical_step),
+                                baselines_ok, bad_edges, baseline_deviation, allowed_deviation = (
+                                    bundle_adjustment_baselines_are_plausible(
+                                        before_steps, after_steps, typical_step
+                                    )
                                 )
-                                baseline_deviation = np.abs(after_steps - before_steps)
-                                bad_edges = np.flatnonzero(baseline_deviation > allowed_deviation)
-                                if len(bad_edges):
+                                if not baselines_ok:
                                     ba_valid = False
                                     LOGGER.error(
                                         "[%04d] BA_UPDATE rejected: implausible adjacent baseline change(s) %s; "
