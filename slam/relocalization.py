@@ -15,11 +15,10 @@ class RelocFrame:
     def __init__(self, frame_idx, keypoints, descriptors, points_3d, R, t):
         self.frame_idx = frame_idx
         self.keypoints = keypoints
-        self.descriptors = descriptors.astype(np.uint8)
-        self.points_3d = points_3d
+        self.descriptors = np.asarray(descriptors, dtype=np.uint8)
+        self.points_3d = np.asarray(points_3d, dtype=np.float64).reshape(-1, 3)
         self.R = R
         self.t = t
-        self._mean = descriptors.astype(np.float32).mean(axis=0)
 
 
 class Relocalizer:
@@ -31,12 +30,12 @@ class Relocalizer:
     ):
         self.lost_threshold = lost_threshold
         self.min_pnp_inliers = min_pnp_inliers
+        # Retained for backwards-compatible construction; descriptor matching,
+        # not a cosine score over averaged binary bytes, ranks candidates.
         self.sim_threshold = sim_threshold
-
         self.state = TrackingState.TRACKING
         self._fail_count = 0
         self._db: list[RelocFrame] = []
-
         self.K = build_intrinsic_matrix()
         self.matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=False)
 
@@ -58,13 +57,21 @@ class Relocalizer:
     def add_frame(self, frame_idx, keypoints, descriptors, points_3d, R, t):
         if descriptors is None or points_3d is None or len(points_3d) < 4:
             return
-        self._db.append(RelocFrame(frame_idx, keypoints, descriptors, points_3d, R, t))
+        descriptors = np.asarray(descriptors, dtype=np.uint8)
+        points_3d = np.asarray(points_3d, dtype=np.float64).reshape(-1, 3)
+        count = min(len(descriptors), len(points_3d), len(keypoints))
+        if count < 4:
+            return
+        # The descriptor at index i must refer to the same 3D landmark i.
+        self._db.append(
+            RelocFrame(frame_idx, list(keypoints)[:count], descriptors[:count],
+                       points_3d[:count], R, t)
+        )
 
     def relocalize(self, keypoints, descriptors):
         if descriptors is None or len(self._db) == 0:
             return None, None, False
-        curr_mean = descriptors.astype(np.float32).mean(axis=0)
-        candidates = self._get_candidates(curr_mean, top_k=5)
+        candidates = self._get_candidates(descriptors, top_k=10)
         for cand in candidates:
             R, t, ok = self._pnp_verify(keypoints, descriptors, cand)
             if ok:
@@ -74,32 +81,51 @@ class Relocalizer:
                 return R, t, True
         return None, None, False
 
-    def _get_candidates(self, curr_mean, top_k=5):
-        sims = []
+    def _good_matches(self, descriptors, candidate_descriptors):
+        if descriptors is None or candidate_descriptors is None or len(candidate_descriptors) < 2:
+            return []
+        pairs = self.matcher.knnMatch(
+            np.asarray(descriptors, dtype=np.uint8),
+            np.asarray(candidate_descriptors, dtype=np.uint8),
+            k=2,
+        )
+        good = []
+        for pair in pairs:
+            if len(pair) == 2 and pair[0].distance < 0.75 * pair[1].distance:
+                good.append(pair[0])
+        return good
+
+    def _get_candidates(self, descriptors, top_k=10):
+        """Rank candidate keyframes by ratio-tested ORB correspondences.
+
+        A cosine similarity between means of packed ORB bytes is not a valid
+        visual descriptor metric; it caused valid recovery candidates to be
+        filtered out after abrupt motion or a short tracking failure.
+        """
+        ranked = []
         for rf in self._db:
-            d = np.linalg.norm(curr_mean) * np.linalg.norm(rf._mean)
-            sim = float(np.dot(curr_mean, rf._mean) / d) if d > 1e-8 else 0.0
-            sims.append((sim, rf))
-        sims.sort(key=lambda x: -x[0])
-        return [rf for sim, rf in sims[:top_k] if sim >= self.sim_threshold]
+            good = self._good_matches(descriptors, rf.descriptors)
+            if len(good) >= self.min_pnp_inliers:
+                ranked.append((len(good), rf))
+        ranked.sort(key=lambda item: item[0], reverse=True)
+        return [rf for _, rf in ranked[:top_k]]
 
     def _pnp_verify(self, kp_curr, desc_curr, cand: RelocFrame):
-        raw = self.matcher.knnMatch(desc_curr, cand.descriptors, k=2)
-        good = [m for m, n in raw if len([m, n]) == 2 and m.distance < 0.75 * n.distance]
+        good = self._good_matches(desc_curr, cand.descriptors)
         if len(good) < self.min_pnp_inliers:
             return None, None, False
         pts_2d, pts_3d = [], []
-        for m in good:
-            if m.trainIdx < len(cand.points_3d):
-                pts_2d.append(kp_curr[m.queryIdx].pt)
-                pts_3d.append(cand.points_3d[m.trainIdx])
+        for match in good:
+            if match.trainIdx < len(cand.points_3d) and match.queryIdx < len(kp_curr):
+                pts_2d.append(kp_curr[match.queryIdx].pt)
+                pts_3d.append(cand.points_3d[match.trainIdx])
         if len(pts_3d) < self.min_pnp_inliers:
             return None, None, False
-        pts_2d = np.array(pts_2d, dtype=np.float64)
-        pts_3d = np.array(pts_3d, dtype=np.float64)
+        pts_2d = np.asarray(pts_2d, dtype=np.float64)
+        pts_3d = np.asarray(pts_3d, dtype=np.float64)
         ok, rvec, tvec, inliers = cv2.solvePnPRansac(
             pts_3d, pts_2d, self.K, None,
-            iterationsCount=200,
+            iterationsCount=300,
             reprojectionError=4.0,
             confidence=0.99,
             flags=cv2.SOLVEPNP_ITERATIVE,
