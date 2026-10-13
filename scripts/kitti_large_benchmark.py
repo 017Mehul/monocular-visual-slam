@@ -57,7 +57,7 @@ def aligned_rpe(gt_poses, est_poses, frame_ids, delta=1):
     return float(np.sqrt(np.mean(trans_sq))), float(np.sqrt(np.mean(rot_sq)))
 
 
-def run_sequence(sequence_dir, gt_file, output_dir, frames, thresholds):
+def run_sequence(sequence_dir, gt_file, output_dir, frames, thresholds, no_ba=False, no_loop_closure=False):
     output_dir.mkdir(parents=True, exist_ok=True)
     calibration_file = sequence_dir / "calib.txt"
     if not calibration_file.is_file():
@@ -77,6 +77,10 @@ def run_sequence(sequence_dir, gt_file, output_dir, frames, thresholds):
            "--output-dir", str(output_dir)]
     if frames is not None:
         cmd += ["--max-frames", str(frames)]
+    if no_ba:
+        cmd.append("--no-ba")
+    if no_loop_closure:
+        cmd.append("--no-loop-closure")
     proc = subprocess.run(cmd, text=True, capture_output=True)
     result = {"sequence": sequence_dir.name, "return_code": proc.returncode}
     if proc.returncode != 0:
@@ -178,6 +182,8 @@ def main():
     p.add_argument("--max-rpe-translation-rmse-m", type=float, default=None)
     p.add_argument("--max-rpe-rotation-rmse-deg", type=float, default=None)
     p.add_argument("--fail-fast", action="store_true")
+    p.add_argument("--no-ba", action="store_true", help="Disable bundle adjustment for an ablation run")
+    p.add_argument("--no-loop-closure", action="store_true", help="Disable loop corrections for an ablation run")
     args = p.parse_args()
     for name in ("max_ate_rmse_m", "max_rpe_translation_rmse_m", "max_rpe_rotation_rmse_deg"):
         value = getattr(args, name)
@@ -201,7 +207,7 @@ def main():
                       "status": "SKIPPED", "error": "missing sequence or ground truth"}
         else:
             print(f"[benchmark] running KITTI {seq}")
-            result = run_sequence(seq_dir, gt_file, Path(args.output_dir) / seq, args.frames, thresholds)
+            result = run_sequence(seq_dir, gt_file, Path(args.output_dir) / seq, args.frames, thresholds, args.no_ba, args.no_loop_closure)
         results.append(result)
         print(json.dumps(result))
         if args.fail_fast and result["status"] in ("FAILED", "ACCURACY_FAILED", "SKIPPED"):
