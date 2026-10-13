@@ -57,7 +57,7 @@ def aligned_rpe(gt_poses, est_poses, frame_ids, delta=1):
     return float(np.sqrt(np.mean(trans_sq))), float(np.sqrt(np.mean(rot_sq)))
 
 
-def run_sequence(sequence_dir, gt_file, output_dir, frames, thresholds, no_ba=False, no_loop_closure=False, no_map_pnp=False):
+def run_sequence(sequence_dir, gt_file, output_dir, frames, thresholds, no_ba=False, no_loop_closure=False, no_map_pnp=False, enable_ba=False):
     output_dir.mkdir(parents=True, exist_ok=True)
     calibration_file = sequence_dir / "calib.txt"
     if not calibration_file.is_file():
@@ -77,6 +77,8 @@ def run_sequence(sequence_dir, gt_file, output_dir, frames, thresholds, no_ba=Fa
            "--log-level", "DEBUG", "--output-dir", str(output_dir)]
     if frames is not None:
         cmd += ["--max-frames", str(frames)]
+    if enable_ba and not no_ba:
+        cmd.append("--enable-ba")
     if no_ba:
         cmd.append("--no-ba")
     if no_loop_closure:
@@ -209,6 +211,7 @@ def main():
                    help="Fail if end-to-end P95 frame latency exceeds this value")
     p.add_argument("--fail-fast", action="store_true")
     p.add_argument("--no-ba", action="store_true", help="Disable bundle adjustment for an ablation run")
+    p.add_argument("--enable-ba", action="store_true", help="Enable experimental bundle adjustment for an ablation run")
     p.add_argument("--no-loop-closure", action="store_true", help="Disable loop corrections for an ablation run")
     p.add_argument("--no-map-pnp", action="store_true", help="Disable local-map PnP refinement for an ablation run")
     args = p.parse_args()
@@ -238,7 +241,7 @@ def main():
                       "status": "SKIPPED", "error": "missing sequence or ground truth"}
         else:
             print(f"[benchmark] running KITTI {seq}")
-            result = run_sequence(seq_dir, gt_file, Path(args.output_dir) / seq, args.frames, thresholds, args.no_ba, args.no_loop_closure, args.no_map_pnp)
+            result = run_sequence(seq_dir, gt_file, Path(args.output_dir) / seq, args.frames, thresholds, args.no_ba, args.no_loop_closure, args.no_map_pnp, args.enable_ba)
         results.append(result)
         print(json.dumps(result))
         if args.fail_fast and result["status"] in ("FAILED", "ACCURACY_FAILED", "SKIPPED"):
