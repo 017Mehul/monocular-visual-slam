@@ -409,12 +409,18 @@ def run(args):
                             opt_poses, opt_pts = ba.adjust(kf_mgr.get_window_poses(), win_pts, observations)
                             kf_mgr.update_poses_from_ba(opt_poses)
                             kf_mgr.update_points_from_ba(opt_pts)
+                            frame_to_pose_idx = {
+                                source_frame: pose_idx
+                                for pose_idx, source_frame in enumerate(trajectory.frame_ids)
+                            }
                             for kf, (R_opt, t_opt) in zip(kf_mgr.keyframes, opt_poses):
-                                if 0 <= kf.frame_idx < trajectory.length():
-                                    T = np.eye(4)
-                                    T[:3, :3] = R_opt
-                                    T[:3, 3] = np.asarray(t_opt).ravel()
-                                    trajectory.poses[kf.frame_idx] = T
+                                pose_idx = frame_to_pose_idx.get(kf.frame_idx)
+                                if pose_idx is not None:
+                                    # BA parameters are world-to-camera; trajectory stores camera-to-world.
+                                    T_wc = np.eye(4)
+                                    T_wc[:3, :3] = R_opt
+                                    T_wc[:3, 3] = np.asarray(t_opt).ravel()
+                                    trajectory.poses[pose_idx] = np.linalg.inv(T_wc)
                             map_mgr.replace_points(kf_mgr.get_window_points())
                         kf_since_ba = 0
 
@@ -424,7 +430,15 @@ def run(args):
                 if found and kf is not None:
                     lc_frames.append(trajectory.length() - 1)
                     correction = loop_det.compute_correction(trajectory.get_latest_pose(), trajectory.poses[kf.pose_idx])
-                    loop_det.apply_smooth_correction(trajectory.poses, kf.pose_idx + 1, correction)
+                    correction_by_pose = loop_det.apply_smooth_correction(
+                        trajectory.poses, kf.pose_idx + 1, correction
+                    )
+                    frame_corrections = {
+                        trajectory.frame_ids[pose_idx]: pose_correction
+                        for pose_idx, pose_correction in correction_by_pose.items()
+                    }
+                    kf_mgr.apply_world_corrections(frame_corrections)
+                    map_mgr.replace_points(kf_mgr.get_window_points())
                     summary["loop_closures"] += 1
                     LOGGER.info("[%04d] Loop closure applied", frame_idx)
 
