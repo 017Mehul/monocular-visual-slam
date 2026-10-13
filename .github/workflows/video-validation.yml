@@ -8,6 +8,7 @@ on:
       - ".github/workflows/video-validation.yml"
       - "slam/**"
       - "scripts/real_world_validation.py"
+      - "scripts/download_kitti_subset.py"
       - "config.production.json"
   workflow_dispatch:
 
