@@ -299,7 +299,7 @@ def run(args):
                 if ok:
                     # PnP returns an absolute world-to-camera pose. Do not
                     # compose it as if it were a frame-to-frame relative pose.
-                    trajectory.set_latest_world_to_camera(r_rel, t_rel)
+                    trajectory.set_latest_world_to_camera(r_rel, t_rel, frame_idx=frame_idx)
                     prev_frame, prev_kp, prev_desc = frame, curr_kp, curr_desc
                     summary["relocalizations"] += 1
                     LOGGER.info("[%04d] Relocalization succeeded", frame_idx)
@@ -373,7 +373,7 @@ def run(args):
             t_scaled = t_vec * scale
 
             previous_pose = trajectory.get_latest_pose()
-            trajectory.update(r_mat, t_scaled)
+            trajectory.update(r_mat, t_scaled, frame_idx=frame_idx)
             current_pose = trajectory.get_latest_pose()
             R_prev_wc, t_prev_wc = trajectory.world_to_camera(previous_pose)
             R_curr_wc, t_curr_wc = trajectory.world_to_camera(current_pose)
