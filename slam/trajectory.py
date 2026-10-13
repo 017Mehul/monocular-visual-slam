@@ -48,6 +48,12 @@ class Trajectory:
     def get_latest_pose(self):
         return self.poses[-1].copy()
 
+    def append_world_to_camera(self, R_wc, t_wc, frame_idx):
+        """Append a recovered absolute world-to-camera pose without overwriting history."""
+        T_cw = self.camera_to_world_from_world_to_camera(R_wc, t_wc)
+        self.poses.append(T_cw)
+        self.frame_ids.append(int(frame_idx))
+
     def set_latest_world_to_camera(self, R_wc, t_wc, frame_idx=None):
         """Replace the latest pose using an absolute world-to-camera estimate."""
         R_wc = np.asarray(R_wc, dtype=np.float64).reshape(3, 3)
