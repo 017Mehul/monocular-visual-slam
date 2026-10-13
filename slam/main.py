@@ -62,6 +62,7 @@ def parse_args():
     parser.add_argument("--no-viz", action="store_true", help="Disable 3D trajectory and map visualization")
     parser.add_argument("--headless", action="store_true", help="Disable all GUI windows and render loops")
     parser.add_argument("--no-ba", action="store_true", help="Disable bundle adjustment for lower latency")
+    parser.add_argument("--no-loop-closure", action="store_true", help="Disable loop-candidate detection/corrections for controlled ablation runs")
     parser.add_argument("--max-frames", type=int, default=None, help="Stop after processing this many frames")
     parser.add_argument("--config-file", type=str, default=None, help="JSON file containing CAMERA_PARAMS and/or PIPELINE_PARAMS overrides")
     parser.add_argument("--calibration", type=str, default=None, help="Camera calibration .npz containing K and dist")
@@ -446,23 +447,24 @@ def run(args):
                             map_mgr.replace_points(kf_mgr.get_window_points())
                         kf_since_ba = 0
 
-            loop_det.register_keyframe(frame_idx, trajectory.length() - 1, curr_kp, curr_desc)
-            if frame_idx % loop_every == 0:
-                found, kf, _, _ = loop_det.detect(frame_idx, curr_kp, curr_desc)
-                if found and kf is not None:
-                    lc_frames.append(trajectory.length() - 1)
-                    correction = loop_det.compute_correction(trajectory.get_latest_pose(), trajectory.poses[kf.pose_idx])
-                    correction_by_pose = loop_det.apply_smooth_correction(
-                        trajectory.poses, kf.pose_idx + 1, correction
-                    )
-                    frame_corrections = {
-                        trajectory.frame_ids[pose_idx]: pose_correction
-                        for pose_idx, pose_correction in correction_by_pose.items()
-                    }
-                    kf_mgr.apply_world_corrections(frame_corrections)
-                    map_mgr.replace_points(kf_mgr.get_window_points())
-                    summary["loop_closures"] += 1
-                    LOGGER.info("[%04d] Loop closure applied", frame_idx)
+            if not args.no_loop_closure:
+                loop_det.register_keyframe(frame_idx, trajectory.length() - 1, curr_kp, curr_desc)
+                if frame_idx % loop_every == 0:
+                    found, kf, _, _ = loop_det.detect(frame_idx, curr_kp, curr_desc)
+                    if found and kf is not None:
+                        lc_frames.append(trajectory.length() - 1)
+                        correction = loop_det.compute_correction(trajectory.get_latest_pose(), trajectory.poses[kf.pose_idx])
+                        correction_by_pose = loop_det.apply_smooth_correction(
+                            trajectory.poses, kf.pose_idx + 1, correction
+                        )
+                        frame_corrections = {
+                            trajectory.frame_ids[pose_idx]: pose_correction
+                            for pose_idx, pose_correction in correction_by_pose.items()
+                        }
+                        kf_mgr.apply_world_corrections(frame_corrections)
+                        map_mgr.replace_points(kf_mgr.get_window_points())
+                        summary["loop_closures"] += 1
+                        LOGGER.info("[%04d] Loop closure applied", frame_idx)
 
             if frame_idx % prune_every == 0:
                 map_mgr.prune_outliers()
