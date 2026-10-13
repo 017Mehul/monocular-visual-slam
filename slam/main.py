@@ -452,19 +452,30 @@ def run(args):
                 if frame_idx % loop_every == 0:
                     found, kf, _, _ = loop_det.detect(frame_idx, curr_kp, curr_desc)
                     if found and kf is not None:
-                        lc_frames.append(trajectory.length() - 1)
-                        correction = loop_det.compute_correction(trajectory.get_latest_pose(), trajectory.poses[kf.pose_idx])
-                        correction_by_pose = loop_det.apply_smooth_correction(
-                            trajectory.poses, kf.pose_idx + 1, correction
-                        )
-                        frame_corrections = {
-                            trajectory.frame_ids[pose_idx]: pose_correction
-                            for pose_idx, pose_correction in correction_by_pose.items()
-                        }
-                        kf_mgr.apply_world_corrections(frame_corrections)
-                        map_mgr.replace_points(kf_mgr.get_window_points())
-                        summary["loop_closures"] += 1
-                        LOGGER.info("[%04d] Loop closure applied", frame_idx)
+                        current_pose = trajectory.get_latest_pose()
+                        candidate_pose = trajectory.poses[kf.pose_idx]
+                        if not loop_det.pose_consistent(
+                            current_pose, candidate_pose, R_loop, t_loop
+                        ):
+                            LOGGER.info(
+                                "[%04d] Rejecting loop candidate at frame %d: "
+                                "relative geometry conflicts with trajectory prior",
+                                frame_idx, kf.frame_idx,
+                            )
+                        else:
+                            lc_frames.append(trajectory.length() - 1)
+                            correction = loop_det.compute_correction(current_pose, candidate_pose)
+                            correction_by_pose = loop_det.apply_smooth_correction(
+                                trajectory.poses, kf.pose_idx + 1, correction
+                            )
+                            frame_corrections = {
+                                trajectory.frame_ids[pose_idx]: pose_correction
+                                for pose_idx, pose_correction in correction_by_pose.items()
+                            }
+                            kf_mgr.apply_world_corrections(frame_corrections)
+                            map_mgr.replace_points(kf_mgr.get_window_points())
+                            summary["loop_closures"] += 1
+                            LOGGER.info("[%04d] Consistent loop closure applied", frame_idx)
 
             if frame_idx % prune_every == 0:
                 map_mgr.prune_outliers()
