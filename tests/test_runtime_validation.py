@@ -14,3 +14,19 @@ def test_runtime_monitor_tracks_health_metrics():
     assert report["avg_features"] == 200.0
     assert report["p95_frame_time_ms"] == pytest.approx(191.0)
     assert report["p99_frame_time_ms"] == pytest.approx(198.2)
+
+
+def test_sustained_percentiles_and_averages_cover_entire_run_not_rolling_window():
+    monitor = RuntimeMonitor(window_size=2, max_frame_time_ms=100.0)
+    monitor.record(0.01, 100, 20, 10, True)
+    monitor.record(0.02, 200, 40, 20, True)
+    monitor.record(0.30, 300, 60, 30, False)
+
+    report = monitor.snapshot()
+
+    assert report["metrics_scope"] == "entire_run"
+    assert report["avg_features"] == 200.0
+    assert report["avg_matches"] == 40.0
+    assert report["avg_inliers"] == 20.0
+    assert report["p95_frame_time_ms"] == pytest.approx(272.0)
+    assert report["p99_frame_time_ms"] == pytest.approx(294.4)
