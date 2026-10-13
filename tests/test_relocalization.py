@@ -2,6 +2,7 @@ import cv2
 import numpy as np
 
 from slam.relocalization import Relocalizer
+from slam.keyframe_manager import KeyframeManager
 
 
 def test_relocalization_ranks_by_real_orb_correspondences():
@@ -19,3 +20,45 @@ def test_relocalization_ranks_by_real_orb_correspondences():
 
     assert ranked
     assert ranked[0].frame_idx == 20
+
+
+
+def test_relocalization_database_syncs_bundle_adjusted_keyframes():
+    descriptors = np.arange(8 * 32, dtype=np.uint8).reshape(8, 32)
+    keypoints = [cv2.KeyPoint(float(i), float(i + 1), 3) for i in range(8)]
+    points = np.arange(24, dtype=np.float64).reshape(8, 3)
+
+    relocalizer = Relocalizer()
+    relocalizer.add_frame(20, keypoints, descriptors, points, np.eye(3), np.zeros((3, 1)))
+
+    manager = KeyframeManager(min_frames=1, min_baseline=0.0)
+    kf = manager.insert(20, np.eye(3), np.array([[1.0], [2.0], [3.0]]),
+                        keypoints, descriptors, points + 5.0)
+    relocalizer.sync_keyframes(manager.keyframes)
+
+    np.testing.assert_allclose(relocalizer._db[0].points_3d, points + 5.0)
+    np.testing.assert_allclose(relocalizer._db[0].t.ravel(), [1.0, 2.0, 3.0])
+    assert relocalizer._db[0].frame_idx == kf.frame_idx
+
+
+def test_relocalization_database_applies_loop_world_correction():
+    descriptors = np.arange(4 * 32, dtype=np.uint8).reshape(4, 32)
+    keypoints = [cv2.KeyPoint(float(i), float(i + 1), 3) for i in range(4)]
+    points = np.array([[0.0, 0.0, 2.0], [1.0, 0.0, 2.0],
+                       [0.0, 1.0, 3.0], [1.0, 1.0, 4.0]])
+    relocalizer = Relocalizer()
+    relocalizer.add_frame(20, keypoints, descriptors, points,
+                          np.eye(3), np.zeros((3, 1)))
+
+    correction = np.eye(4)
+    correction[:3, 3] = [2.0, -1.0, 0.5]
+    relocalizer.apply_world_corrections({20: correction})
+
+    np.testing.assert_allclose(
+        relocalizer._db[0].points_3d,
+        points + np.array([2.0, -1.0, 0.5]),
+    )
+    np.testing.assert_allclose(
+        relocalizer._db[0].t.ravel(),
+        [-2.0, 1.0, -0.5],
+    )
