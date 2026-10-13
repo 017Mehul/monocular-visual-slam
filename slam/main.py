@@ -306,7 +306,7 @@ def run(args):
                 if ok:
                     # PnP returns an absolute world-to-camera pose. Do not
                     # compose it as if it were a frame-to-frame relative pose.
-                    trajectory.set_latest_world_to_camera(r_rel, t_rel, frame_idx=frame_idx)
+                    trajectory.append_world_to_camera(r_rel, t_rel, frame_idx=frame_idx)
                     prev_frame, prev_kp, prev_desc = frame, curr_kp, curr_desc
                     summary["relocalizations"] += 1
                     summary["successful_tracking_frames"] += 1
