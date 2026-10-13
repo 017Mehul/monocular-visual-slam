@@ -8,8 +8,6 @@
 
 Real-time, modular **monocular visual SLAM** pipeline in Python using ORB features, RANSAC pose estimation, triangulation, local bundle adjustment, loop-closure correction, and relocalization. The runtime now includes production-oriented controls such as structured logging, headless execution, JSON-based config overrides, artifact export, and run summaries.
 
-> Status: research-grade prototype with corrected geometry, explicit monocular scale handling, cross-keyframe BA associations, relocalization, loop detection, automated unit tests, and reproducible evaluation tooling.
-
 > Validation status: research-grade prototype. The repository contains automated tests, a CI workflow, KITTI evaluation/benchmark tooling, an optional external metric-motion adapter, and long-duration validation scripts. These tools do not by themselves prove benchmark accuracy or real-world stability; those claims require recorded successful runs on the intended datasets and hardware.
 
 ## Demo
