@@ -43,6 +43,8 @@ LOOP_CLOSURE_PARAMS = {
     "similarity_threshold": 0.80,
     "min_matches": 40,
     "min_skip_frames": 40,
+    # Retrieve a wider shortlist; every candidate still must pass geometry checks.
+    "candidate_top_k": 10,
 }
 
 PIPELINE_PARAMS = {
