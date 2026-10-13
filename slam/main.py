@@ -409,9 +409,22 @@ def run(args):
                 curr_kp, curr_desc, top_k=3
             )
             if pnp_R is not None and pnp_t is not None and pnp_inliers >= reloc.min_pnp_inliers:
-                trajectory.set_latest_world_to_camera(pnp_R, pnp_t, frame_idx=frame_idx)
-                LOGGER.debug("[%04d] Refined pose from local map with %d PnP inliers",
-                             frame_idx, pnp_inliers)
+                # Guard against a repeated-texture PnP solution that conflicts
+                # sharply with the independent relative-pose rotation estimate.
+                T_pnp_wc = np.eye(4)
+                T_pnp_wc[:3, :3] = pnp_R
+                T_pnp_wc[:3, 3] = np.asarray(pnp_t).reshape(3)
+                pnp_pose_cw = np.linalg.inv(T_pnp_wc)
+                rotation_delta = pnp_pose_cw[:3, :3] @ current_pose[:3, :3].T
+                cos_delta = np.clip((np.trace(rotation_delta) - 1.0) / 2.0, -1.0, 1.0)
+                rotation_error_deg = float(np.degrees(np.arccos(cos_delta)))
+                if np.isfinite(rotation_error_deg) and rotation_error_deg <= 20.0:
+                    trajectory.set_latest_world_to_camera(pnp_R, pnp_t, frame_idx=frame_idx)
+                    LOGGER.debug("[%04d] Refined pose from local map with %d PnP inliers",
+                                 frame_idx, pnp_inliers)
+                else:
+                    LOGGER.debug("[%04d] Ignoring inconsistent local-map PnP pose (rotation delta %.1f deg)",
+                                 frame_idx, rotation_error_deg)
 
             current_pose = trajectory.get_latest_pose()
             R_prev_wc, t_prev_wc = trajectory.world_to_camera(previous_pose)
