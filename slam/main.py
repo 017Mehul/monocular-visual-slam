@@ -26,6 +26,10 @@ from slam.trajectory import Trajectory
 from slam.triangulation import Triangulator
 from slam.visualization import Visualizer
 from slam.runtime_validation import RuntimeMonitor
+from slam.pose_safeguards import (
+    is_valid_world_to_camera_pose,
+    translation_update_is_plausible,
+)
 from slam.config import CAMERA_PARAMS, PIPELINE_PARAMS
 
 
@@ -410,8 +414,6 @@ def run(args):
                 curr_kp, curr_desc, top_k=3
             )
             if pnp_R is not None and pnp_t is not None and pnp_inliers >= reloc.min_pnp_inliers:
-                # Guard against a repeated-texture PnP solution that conflicts
-                # sharply with the independent relative-pose rotation estimate.
                 T_pnp_wc = np.eye(4)
                 T_pnp_wc[:3, :3] = pnp_R
                 T_pnp_wc[:3, 3] = np.asarray(pnp_t).reshape(3)
@@ -419,13 +421,39 @@ def run(args):
                 rotation_delta = pnp_pose_cw[:3, :3] @ predicted_pose[:3, :3].T
                 cos_delta = np.clip((np.trace(rotation_delta) - 1.0) / 2.0, -1.0, 1.0)
                 rotation_error_deg = float(np.degrees(np.arccos(cos_delta)))
-                if np.isfinite(rotation_error_deg) and rotation_error_deg <= 20.0:
+                pose_valid = is_valid_world_to_camera_pose(pnp_R, pnp_t)
+                plausible, translation_error, translation_limit = translation_update_is_plausible(
+                    predicted_pose[:3, 3], pnp_pose_cw[:3, 3],
+                    trajectory.get_positions()[:-1],
+                )
+                LOGGER.debug(
+                    "[%04d] PNP_CANDIDATE inliers=%d valid=%s rotation_delta_deg=%.3f "
+                    "translation_innovation=%.6f limit=%.6f",
+                    frame_idx, pnp_inliers, pose_valid, rotation_error_deg,
+                    translation_error, translation_limit,
+                )
+                if pose_valid and np.isfinite(rotation_error_deg) and rotation_error_deg <= 20.0 and plausible:
+                    before_position = predicted_pose[:3, 3].copy()
                     trajectory.set_latest_world_to_camera(pnp_R, pnp_t, frame_idx=frame_idx)
-                    LOGGER.debug("[%04d] Refined pose from local map with %d PnP inliers",
-                                 frame_idx, pnp_inliers)
+                    accepted_pose = trajectory.get_latest_pose()
+                    LOGGER.debug(
+                        "[%04d] POSE_UPDATE source=PNP accepted center_delta=%.6f "
+                        "center_before=%s center_after=%s",
+                        frame_idx, float(np.linalg.norm(accepted_pose[:3, 3] - before_position)),
+                        np.round(before_position, 4).tolist(),
+                        np.round(accepted_pose[:3, 3], 4).tolist(),
+                    )
                 else:
-                    LOGGER.debug("[%04d] Ignoring inconsistent local-map PnP pose (rotation delta %.1f deg)",
-                                 frame_idx, rotation_error_deg)
+                    LOGGER.warning(
+                        "[%04d] POSE_UPDATE source=PNP rejected valid=%s rotation_delta_deg=%.3f "
+                        "translation_innovation=%.6f limit=%.6f",
+                        frame_idx, pose_valid, rotation_error_deg,
+                        translation_error, translation_limit,
+                    )
+            LOGGER.debug(
+                "[%04d] POSE_UPDATE source=VO center=%s",
+                frame_idx, np.round(predicted_pose[:3, 3], 4).tolist(),
+            )
 
             current_pose = trajectory.get_latest_pose()
             R_prev_wc, t_prev_wc = trajectory.world_to_camera(previous_pose)
@@ -459,22 +487,65 @@ def run(args):
                     if ba and kf_since_ba >= ba_every and kf_mgr.size() >= 3:
                         observations, win_pts = kf_mgr.build_observations()
                         if len(observations) >= 8 and len(win_pts) >= 4:
-                            opt_poses, opt_pts = ba.adjust(kf_mgr.get_window_poses(), win_pts, observations)
-                            kf_mgr.update_poses_from_ba(opt_poses)
-                            kf_mgr.update_points_from_ba(opt_pts)
-                            frame_to_pose_idx = {
-                                source_frame: pose_idx
-                                for pose_idx, source_frame in enumerate(trajectory.frame_ids)
-                            }
-                            for kf, (R_opt, t_opt) in zip(kf_mgr.keyframes, opt_poses):
-                                pose_idx = frame_to_pose_idx.get(kf.frame_idx)
-                                if pose_idx is not None:
-                                    # BA parameters are world-to-camera; trajectory stores camera-to-world.
-                                    trajectory.set_pose_from_world_to_camera(pose_idx, R_opt, t_opt)
-                            map_mgr.replace_points(kf_mgr.get_window_points())
-                            # The relocalizer owns a separate landmark database;
-                            # refresh its active keyframes after BA changes poses/points.
-                            reloc.sync_keyframes(kf_mgr.keyframes)
+                            ba_input_poses = kf_mgr.get_window_poses()
+                            opt_poses, opt_pts = ba.adjust(ba_input_poses, win_pts, observations)
+                            # Reject numerically invalid BA output before mutating any shared state.
+                            ba_valid = (
+                                len(opt_poses) == len(ba_input_poses)
+                                and all(is_valid_world_to_camera_pose(R, t) for R, t in opt_poses)
+                                and np.asarray(opt_pts).ndim in (1, 2)
+                                and np.isfinite(np.asarray(opt_pts, dtype=np.float64)).all()
+                            )
+                            # Compare adjacent keyframe baselines before/after BA. A new
+                            # isolated jump is rejected relative to its own pre-BA baseline,
+                            # not by a fixed world-speed threshold.
+                            def _camera_centers(poses):
+                                centers = []
+                                for R, t in poses:
+                                    R = np.asarray(R, dtype=np.float64).reshape(3, 3)
+                                    t = np.asarray(t, dtype=np.float64).reshape(3)
+                                    centers.append(-R.T @ t)
+                                return np.asarray(centers, dtype=np.float64)
+                            if ba_valid and len(opt_poses) >= 3:
+                                before_centers = _camera_centers(ba_input_poses)
+                                after_centers = _camera_centers(opt_poses)
+                                before_steps = np.linalg.norm(np.diff(before_centers, axis=0), axis=1)
+                                after_steps = np.linalg.norm(np.diff(after_centers, axis=0), axis=1)
+                                typical_step = float(np.median(before_steps[before_steps > 1e-9])) if np.any(before_steps > 1e-9) else 1.0
+                                allowed_steps = np.maximum(3.0, 10.0 * np.maximum(before_steps, 0.25 * typical_step))
+                                bad_edges = np.flatnonzero(after_steps > allowed_steps)
+                                if len(bad_edges):
+                                    ba_valid = False
+                                    LOGGER.error(
+                                        "[%04d] BA_UPDATE rejected: implausible adjacent baseline(s) %s; "
+                                        "before=%s after=%s allowed=%s",
+                                        frame_idx, bad_edges.tolist(),
+                                        np.round(before_steps[bad_edges], 4).tolist(),
+                                        np.round(after_steps[bad_edges], 4).tolist(),
+                                        np.round(allowed_steps[bad_edges], 4).tolist(),
+                                    )
+                            if ba_valid:
+                                kf_mgr.update_poses_from_ba(opt_poses)
+                                kf_mgr.update_points_from_ba(opt_pts)
+                                frame_to_pose_idx = {
+                                    source_frame: pose_idx
+                                    for pose_idx, source_frame in enumerate(trajectory.frame_ids)
+                                }
+                                for kf, (R_opt, t_opt) in zip(kf_mgr.keyframes, opt_poses):
+                                    pose_idx = frame_to_pose_idx.get(kf.frame_idx)
+                                    if pose_idx is not None:
+                                        trajectory.set_pose_from_world_to_camera(pose_idx, R_opt, t_opt)
+                                map_mgr.replace_points(kf_mgr.get_window_points())
+                                reloc.sync_keyframes(kf_mgr.keyframes)
+                                LOGGER.debug(
+                                    "[%04d] BA_UPDATE accepted poses=%d landmarks=%d",
+                                    frame_idx, len(opt_poses), len(opt_pts),
+                                )
+                            else:
+                                LOGGER.error(
+                                    "[%04d] BA_UPDATE rejected: invalid pose/landmark output",
+                                    frame_idx,
+                                )
                         kf_since_ba = 0
 
             if not args.no_loop_closure:
@@ -493,23 +564,44 @@ def run(args):
                                 frame_idx, kf.frame_idx,
                             )
                         else:
-                            lc_frames.append(trajectory.length() - 1)
                             correction = loop_det.compute_correction(current_pose, candidate_pose)
-                            correction_by_pose = loop_det.apply_smooth_correction(
-                                trajectory.poses, kf.pose_idx + 1, correction
+                            correction_rotation = correction[:3, :3]
+                            correction_valid = (
+                                np.isfinite(correction).all()
+                                and is_valid_world_to_camera_pose(correction_rotation, correction[:3, 3])
                             )
-                            frame_corrections = {
-                                trajectory.frame_ids[pose_idx]: pose_correction
-                                for pose_idx, pose_correction in correction_by_pose.items()
-                            }
-                            kf_mgr.apply_world_corrections(frame_corrections)
-                            # Loop closure changes the world frame of the trajectory.
-                            # Apply the same per-frame transform to the independent
-                            # relocalization database or PnP recovery will jump to stale poses.
-                            reloc.apply_world_corrections(frame_corrections)
-                            map_mgr.replace_points(kf_mgr.get_window_points())
-                            summary["loop_closures"] += 1
-                            LOGGER.info("[%04d] Consistent loop closure applied", frame_idx)
+                            if not correction_valid:
+                                LOGGER.error(
+                                    "[%04d] LOOP_UPDATE rejected: non-finite or non-rigid correction for candidate frame %d",
+                                    frame_idx, kf.frame_idx,
+                                )
+                            else:
+                                before_positions_to_poses = [pose.copy() for pose in trajectory.poses]
+                                correction_by_pose = loop_det.apply_smooth_correction(
+                                    trajectory.poses, kf.pose_idx + 1, correction
+                                )
+                                if not all(
+                                    np.isfinite(pose).all()
+                                    and is_valid_world_to_camera_pose(pose[:3, :3], pose[:3, 3])
+                                    for pose in trajectory.poses
+                                ):
+                                    trajectory.poses[:] = before_positions_to_poses
+                                    LOGGER.error("[%04d] LOOP_UPDATE rollback: invalid corrected trajectory", frame_idx)
+                                else:
+                                    lc_frames.append(trajectory.length() - 1)
+                                    frame_corrections = {
+                                        trajectory.frame_ids[pose_idx]: pose_correction
+                                        for pose_idx, pose_correction in correction_by_pose.items()
+                                    }
+                                    kf_mgr.apply_world_corrections(frame_corrections)
+                                    reloc.apply_world_corrections(frame_corrections)
+                                    map_mgr.replace_points(kf_mgr.get_window_points())
+                                    summary["loop_closures"] += 1
+                                    correction_norm = float(np.linalg.norm(correction[:3, 3]))
+                                    LOGGER.info(
+                                        "[%04d] LOOP_UPDATE accepted candidate_frame=%d translation_correction=%.6f affected_poses=%d",
+                                        frame_idx, kf.frame_idx, correction_norm, len(frame_corrections),
+                                    )
 
             if frame_idx % prune_every == 0:
                 map_mgr.prune_outliers()
