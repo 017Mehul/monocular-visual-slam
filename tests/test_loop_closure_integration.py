@@ -43,7 +43,7 @@ def test_loop_evaluation_recovers_known_synthetic_revisits(tmp_path, monkeypatch
             "--ground-truth", str(gt),
             "--output", str(output),
             "--words", "32",
-            "--similarity-threshold", "0.1",
+            "--similarity-threshold", "0.85",
             "--revisit-radius-m", "0.5",
             "--min-separation-frames", "3",
             "--frame-stride", "1",
