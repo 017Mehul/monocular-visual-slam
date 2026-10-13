@@ -67,6 +67,41 @@ class LoopClosureDetector:
                 return True, candidate, R, t
         return False, None, None, None
 
+    @staticmethod
+    def pose_consistent(current_pose, candidate_pose, relative_R, relative_t,
+                        max_rotation_error_deg=20.0,
+                        min_translation_direction_cosine=0.5):
+        """Reject geometrically verified matches that contradict the VO pose prior.
+
+        Essential-matrix verification alone can accept repeated textures. Compare
+        its relative rotation and translation direction with the current trajectory
+        before allowing a loop correction. Translation magnitude is deliberately
+        ignored because monocular essential geometry has unknown scale.
+        """
+        current_pose = np.asarray(current_pose, dtype=np.float64).reshape(4, 4)
+        candidate_pose = np.asarray(candidate_pose, dtype=np.float64).reshape(4, 4)
+        relative_R = np.asarray(relative_R, dtype=np.float64).reshape(3, 3)
+        relative_t = np.asarray(relative_t, dtype=np.float64).reshape(3)
+
+        expected_R = candidate_pose[:3, :3].T @ current_pose[:3, :3]
+        rotation_error = relative_R @ expected_R.T
+        cos_angle = np.clip((np.trace(rotation_error) - 1.0) / 2.0, -1.0, 1.0)
+        angle_deg = float(np.degrees(np.arccos(cos_angle)))
+        if not np.isfinite(angle_deg) or angle_deg > max_rotation_error_deg:
+            return False
+
+        expected_t = candidate_pose[:3, :3].T @ (
+            current_pose[:3, 3] - candidate_pose[:3, 3]
+        )
+        expected_norm = float(np.linalg.norm(expected_t))
+        measured_norm = float(np.linalg.norm(relative_t))
+        # If the current trajectory has essentially zero baseline, rotation is
+        # the only meaningful consistency signal available.
+        if expected_norm < 1e-6 or measured_norm < 1e-6:
+            return True
+        cosine = float(np.dot(expected_t, relative_t) / (expected_norm * measured_norm))
+        return bool(np.isfinite(cosine) and cosine >= min_translation_direction_cosine)
+
     def compute_correction(self, current_pose, loop_pose):
         return np.asarray(loop_pose) @ np.linalg.inv(np.asarray(current_pose))
 
