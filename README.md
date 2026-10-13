@@ -32,6 +32,7 @@ If you prefer raster images, replace the SVGs with `docs/demo.gif` and `docs/tra
 - Local bundle adjustment (SciPy least-squares, sparse Jacobian)
 - BoW/TF-IDF place recognition + Essential-matrix verification + smooth pose-graph correction
 - Lost tracking detection + PnP-based relocalization
+- Local-map PnP pose refinement with a relative-rotation consistency gate, falling back to essential-matrix VO when map support is weak
 - Camera calibration utility (checkerboard)
 - Structured logging to console and file
 - Headless mode for servers and batch runs
@@ -243,6 +244,20 @@ For repeatable multi-run comparison, batch evaluation is available:
 ```bash
 python scripts/kitti_batch_evaluation.py --gt dataset/dataset/poses/00.txt --est-dir outputs/ --pattern '**/trajectory_poses.csv' --output outputs/kitti_batch_metrics.json
 ```
+
+## Current validation status
+
+The GitHub Actions CI suite checks syntax, critical static-analysis errors, command-line entry points, and unit tests. The repository also has dedicated long-sequence runtime and multi-sequence KITTI benchmark workflows.
+
+A 1,500-consecutive-frame KITTI sequence-00 stability run passed the configured runtime gates on commit `ae0ab310c0db2a19ed71596475e7acf0f4ffc845`:
+- Tracking success rate: 99.07%
+- Effective throughput: 10.97 FPS
+- P95 frame latency: 118.67 ms (configured gate: 180 ms)
+- Frames processed: 1,500 / 1,500
+
+This runtime result predates the latest local-map PnP refinement. The refinement is covered by a synthetic known-pose regression test, and a fresh runtime/trajectory benchmark is required before claiming that it improves end-to-end accuracy. Do not interpret runtime stability as proof of trajectory accuracy.
+
+The current multi-sequence KITTI workflow reports frame-aligned ATE, translation RPE, rotation RPE, and loop-retrieval metrics. Treat these as the source of truth for accuracy claims; historical values should not be presented as current results.
 
 ## Troubleshooting
 
