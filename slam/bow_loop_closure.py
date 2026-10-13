@@ -26,7 +26,11 @@ class BinaryVocabulary:
         if self.centers is None or descriptors is None or len(descriptors) == 0:
             return np.empty((0,), dtype=np.int32)
         data = np.unpackbits(np.asarray(descriptors, dtype=np.uint8), axis=1).astype(np.float32)
-        distances = ((data[:, None, :] - self.centers[None, :, :]) ** 2).sum(axis=2)
+        # Squared Euclidean distance without allocating an N x words x bits tensor.
+        # This keeps full-sequence evaluation within modest memory limits.
+        center_norms = np.sum(self.centers * self.centers, axis=1)
+        data_norms = np.sum(data * data, axis=1, keepdims=True)
+        distances = data_norms + center_norms[None, :] - 2.0 * (data @ self.centers.T)
         return np.argmin(distances, axis=1).astype(np.int32)
 
 class BoWLoopClosure:
