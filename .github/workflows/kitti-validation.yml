@@ -56,12 +56,24 @@ jobs:
           print(json.dumps(sequences, indent=2))
           PY
 
-      - name: Run full multi-sequence ATE and RPE benchmark
+      - name: Run full multi-sequence accuracy and runtime benchmark
+        continue-on-error: true
+        id: full-benchmark
         run: |
+          set +e
           python scripts/kitti_large_benchmark.py \
             --dataset-root dataset/dataset \
             --sequences 00 01 02 \
-            --output-dir outputs/kitti_benchmark
+            --output-dir outputs/kitti_benchmark \
+            --max-ate-rmse-m 25 \
+            --max-rpe-translation-rmse-m 5 \
+            --max-rpe-rotation-rmse-deg 5 \
+            --min-tracking-success-rate 0.90 \
+            --max-p95-frame-time-ms 250
+          status=$?
+          echo "benchmark_exit_code=$status" >> "$GITHUB_OUTPUT"
+          echo "Benchmark exit code: $status (the explicit gate runs after diagnostics so artifacts are retained)"
+          exit 0
 
       - name: Diagnose trajectory drift without loop corrections
         run: |
@@ -89,6 +101,50 @@ jobs:
             --frame-stride 10 --min-separation-frames 100 --revisit-radius-m 5 \
             --output outputs/loop_closure_05.json
 
+      - name: Compare trajectory with PnP disabled
+        continue-on-error: true
+        run: |
+          python scripts/kitti_large_benchmark.py \
+            --dataset-root dataset/dataset \
+            --sequences 00 \
+            --output-dir outputs/kitti_ablation_no_map_pnp \
+            --no-map-pnp
+
+      - name: Enforce accuracy and runtime acceptance thresholds
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          path = Path("outputs/kitti_benchmark/benchmark_summary.json")
+          if not path.is_file():
+              raise SystemExit("FAIL: benchmark summary missing")
+          summary = json.loads(path.read_text(encoding="utf-8"))
+          if not summary.get("accuracy_thresholds_configured"):
+              raise SystemExit("FAIL: no acceptance thresholds were configured")
+          requested = summary.get("sequences_requested", [])
+          results = {item.get("sequence"): item for item in summary.get("results", [])}
+          failures = []
+          for sequence in requested:
+              result = results.get(sequence)
+              if not result or not result.get("completed"):
+                  failures.append(f"{sequence}: benchmark incomplete")
+              elif result.get("accuracy_passed") is not True:
+                  failures.append(
+                      f"{sequence}: accuracy/runtime gate failed; "
+                      f"ATE={result.get('ate_rmse_m')}, "
+                      f"RPE_t={result.get('rpe_translation_rmse_m')}, "
+                      f"RPE_r={result.get('rpe_rotation_rmse_deg')}, "
+                      f"tracking={result.get('tracking_success_rate')}, "
+                      f"P95={result.get('p95_frame_time_ms')}"
+                  )
+          if failures:
+              print("\n".join(failures))
+              raise SystemExit(1)
+          print("All requested KITTI sequences passed accuracy and runtime thresholds.")
+          PY
+
       - name: Retain benchmark and loop-retrieval results
         if: always()
         uses: actions/upload-artifact@v4
@@ -99,6 +155,7 @@ jobs:
             outputs/kitti_benchmark/
             outputs/kitti_ablation_no_loop/
             outputs/kitti_ablation_no_ba/
+            outputs/kitti_ablation_no_map_pnp/
             outputs/loop_closure_00.json
             outputs/loop_closure_05.json
           if-no-files-found: warn
