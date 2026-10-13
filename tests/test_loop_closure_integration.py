@@ -59,3 +59,32 @@ def test_loop_evaluation_recovers_known_synthetic_revisits(tmp_path, monkeypatch
     assert result["false_negatives"] == 0
     assert result["precision"] == 1.0
     assert result["recall"] == 1.0
+
+
+def test_loop_detector_checks_next_ranked_candidate_after_geometric_rejection(monkeypatch):
+    from slam.loop_closure import Keyframe, LoopClosureDetector
+
+    detector = LoopClosureDetector()
+    descriptors = np.zeros((12, 32), dtype=np.uint8)
+    kps = [cv2.KeyPoint(float(i), float(i), 8) for i in range(12)]
+    candidates = [
+        Keyframe(frame_idx=0, pose_idx=0, keypoints=kps, descriptors=descriptors),
+        Keyframe(frame_idx=20, pose_idx=1, keypoints=kps, descriptors=descriptors),
+        Keyframe(frame_idx=40, pose_idx=2, keypoints=kps, descriptors=descriptors),
+    ]
+    detector.keyframes = candidates
+    detector.bow.query = lambda *args, **kwargs: [(0.95, candidates[0]), (0.90, candidates[1])]
+    calls = []
+
+    def verify(*args):
+        candidate = args[-1]
+        calls.append(candidate)
+        if candidate is candidates[0]:
+            return None, None, 8
+        return np.eye(3), np.ones((3, 1)), detector.min_matches
+
+    monkeypatch.setattr(detector, "_essential_verify", verify)
+    found, selected, _, _ = detector.detect(frame_idx=100, keypoints=kps, descriptors=descriptors)
+    assert found
+    assert selected is candidates[1]
+    assert calls == candidates[:2]
