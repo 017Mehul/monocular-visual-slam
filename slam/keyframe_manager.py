@@ -43,6 +43,9 @@ class KeyframeManager:
         self.max_overlap = max_overlap
         self.window_size = window_size
         self.keyframes: list[Keyframe] = []
+        # Number of BA keyframes inserted over the whole run; `keyframes` is
+        # only the bounded active window and must not be used as a total.
+        self.total_inserted = 0
         self._last_kf_frame_idx = -min_frames
 
     def should_insert(self, frame_idx, R, t, n_matches, n_prev_features):
@@ -58,6 +61,7 @@ class KeyframeManager:
     def insert(self, frame_idx, R, t, keypoints, descriptors, points_3d):
         kf = Keyframe(frame_idx, R, t, keypoints, descriptors, points_3d)
         self.keyframes.append(kf)
+        self.total_inserted += 1
         self._last_kf_frame_idx = frame_idx
         if len(self.keyframes) > self.window_size:
             self.keyframes.pop(0)
