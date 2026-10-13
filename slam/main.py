@@ -540,17 +540,26 @@ def run(args):
                                 before_steps = np.linalg.norm(np.diff(before_centers, axis=0), axis=1)
                                 after_steps = np.linalg.norm(np.diff(after_centers, axis=0), axis=1)
                                 typical_step = float(np.median(before_steps[before_steps > 1e-9])) if np.any(before_steps > 1e-9) else 1.0
-                                allowed_steps = np.maximum(3.0, 10.0 * np.maximum(before_steps, 0.25 * typical_step))
-                                bad_edges = np.flatnonzero(after_steps > allowed_steps)
+                                # BA should refine the local map, not rescale or warp a
+                                # keyframe baseline by an order of magnitude. Compare the
+                                # absolute baseline change against a robust tolerance tied to
+                                # the pre-BA baseline and typical local motion.
+                                allowed_deviation = np.maximum(
+                                    2.0,
+                                    np.maximum(0.5 * before_steps, 3.0 * typical_step),
+                                )
+                                baseline_deviation = np.abs(after_steps - before_steps)
+                                bad_edges = np.flatnonzero(baseline_deviation > allowed_deviation)
                                 if len(bad_edges):
                                     ba_valid = False
                                     LOGGER.error(
-                                        "[%04d] BA_UPDATE rejected: implausible adjacent baseline(s) %s; "
-                                        "before=%s after=%s allowed=%s",
+                                        "[%04d] BA_UPDATE rejected: implausible adjacent baseline change(s) %s; "
+                                        "before=%s after=%s deviation=%s allowed_deviation=%s",
                                         frame_idx, bad_edges.tolist(),
                                         np.round(before_steps[bad_edges], 4).tolist(),
                                         np.round(after_steps[bad_edges], 4).tolist(),
-                                        np.round(allowed_steps[bad_edges], 4).tolist(),
+                                        np.round(baseline_deviation[bad_edges], 4).tolist(),
+                                        np.round(allowed_deviation[bad_edges], 4).tolist(),
                                     )
                             if ba_valid:
                                 kf_mgr.update_poses_from_ba(opt_poses)
