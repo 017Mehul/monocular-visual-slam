@@ -1,6 +1,6 @@
 import numpy as np
 
-from slam.bundle_adjustment import _R_to_rodrigues, _project, _residuals, _pack
+from slam.bundle_adjustment import _project, _residuals, _pack
 from slam.pose_estimation import build_intrinsic_matrix
 
 
