@@ -1,0 +1,104 @@
+name: Recorded Video Stability Validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "slam/**"
+      - "scripts/real_world_validation.py"
+      - "scripts/stress_validation.py"
+      - ".github/workflows/video-validation.yml"
+      - "pyproject.toml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recorded-video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install project and dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Download public recorded video
+        run: |
+          mkdir -p outputs/input
+          curl --fail --location --retry 3 --retry-delay 2 \
+            https://raw.githubusercontent.com/opencv/opencv_extra/4.x/testdata/cv/video/vtest.avi \
+            --output outputs/input/vtest.avi
+          test -s outputs/input/vtest.avi
+
+      - name: Build repeatable 1,500-frame stress clip
+        run: |
+          python - <<'PY'
+          import cv2
+          from pathlib import Path
+
+          source = Path("outputs/input/vtest.avi")
+          output = Path("outputs/input/vtest_1500_frames.avi")
+          target_frames = 1500
+          capture = cv2.VideoCapture(str(source))
+          if not capture.isOpened():
+              raise SystemExit("Could not open downloaded sample video")
+          fps = capture.get(cv2.CAP_PROP_FPS)
+          if not fps or fps <= 0:
+              fps = 25.0
+          writer = None
+          written = 0
+          while written < target_frames:
+              ok, frame = capture.read()
+              if not ok:
+                  capture.release()
+                  capture = cv2.VideoCapture(str(source))
+                  ok, frame = capture.read()
+                  if not ok:
+                      raise SystemExit("Could not rewind sample video")
+              if writer is None:
+                  height, width = frame.shape[:2]
+                  writer = cv2.VideoWriter(
+                      str(output), cv2.VideoWriter_fourcc(*"MJPG"), fps, (width, height)
+                  )
+                  if not writer.isOpened():
+                      raise SystemExit("Could not create repeatable validation clip")
+              writer.write(frame)
+              written += 1
+          capture.release()
+          writer.release()
+          check = cv2.VideoCapture(str(output))
+          actual = int(check.get(cv2.CAP_PROP_FRAME_COUNT))
+          check.release()
+          if actual < target_frames:
+              raise SystemExit(f"Output clip has {actual} frames; expected {target_frames}")
+          print(f"Created {output} with {actual} frames at {fps:.2f} fps")
+          PY
+
+      - name: Run sustained recorded-video validation
+        run: |
+          python scripts/real_world_validation.py \
+            --source outputs/input/vtest_1500_frames.avi \
+            --frames 1500 \
+            --output-dir outputs/video_validation
+
+      - name: Retain validation report and runtime artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: recorded-video-validation-${{ github.run_id }}
+          path: |
+            outputs/video_validation/
+            outputs/input/vtest_1500_frames.avi
+          if-no-files-found: warn
+          retention-days: 30
