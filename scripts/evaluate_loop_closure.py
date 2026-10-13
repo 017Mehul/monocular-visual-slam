@@ -75,9 +75,13 @@ def main():
         candidate = None
         best_score = None
         if bow.vocabulary.centers is not None:
-            ranked = bow.query(frame_idx, descriptors, top_k=1)
-            if ranked:
-                best_score, candidate = ranked[0]
+            # Evaluate the same top-5 retrieval shortlist used by the runtime
+            # detector. A lower-ranked true revisit should not count as missed
+            # solely because a stronger-looking distractor ranks first.
+            ranked = bow.query(frame_idx, descriptors, top_k=5)
+            eligible = [(score, item) for score, item in ranked if score >= args.similarity_threshold]
+            if eligible:
+                best_score, candidate = eligible[0]
 
         known_revisits = [
             previous_idx
@@ -88,6 +92,8 @@ def main():
         observations.append({
             "frame_idx": frame_idx,
             "candidate_frame_idx": candidate["frame_idx"] if candidate is not None else None,
+            "candidate_frame_ids": [item["frame_idx"] for score, item in eligible] if bow.vocabulary.centers is not None else [],
+            "candidate_scores": [float(score) for score, item in eligible] if bow.vocabulary.centers is not None else [],
             "score": float(best_score) if best_score is not None else None,
             "known_revisits": known_revisits,
         })
@@ -98,12 +104,21 @@ def main():
         tp = fp = fn = queries = 0
         for observation in observations:
             candidate_frame = observation["candidate_frame_idx"]
-            score = observation["score"]
-            accepted = candidate_frame is not None and score is not None and score >= threshold
+            candidate_ids = observation.get("candidate_frame_ids") or (
+                [candidate_frame] if candidate_frame is not None else []
+            )
+            candidate_scores = observation.get("candidate_scores") or (
+                [observation["score"]] if observation["score"] is not None else []
+            )
+            accepted_ids = [
+                frame_id for frame_id, score in zip(candidate_ids, candidate_scores)
+                if score is not None and score >= threshold
+            ]
+            accepted = bool(accepted_ids)
             known = observation["known_revisits"]
             if known:
                 queries += 1
-                if accepted and candidate_frame in known:
+                if accepted and any(frame_id in known for frame_id in accepted_ids):
                     tp += 1
                 else:
                     if accepted:
@@ -128,7 +143,8 @@ def main():
         "similarity_threshold": args.similarity_threshold,
         **selected_metrics,
         "threshold_sweep": sweep,
-        "protocol_note": "Ground-truth position proximity labels revisits; this is a candidate-retrieval diagnostic, not a full geometric loop-closure evaluation.",
+        "retrieval_top_k": 5,
+        "protocol_note": "Ground-truth position proximity labels revisits. Precision/recall measure top-5 retrieval candidates; runtime still requires geometric verification, so this is not a full geometric loop-closure evaluation.",
     }
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
