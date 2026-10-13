@@ -26,7 +26,7 @@ def test_vocabulary_trains_and_query_ranks_matching_keyframe_first():
     bow.register(20, unrelated_keyframe, other)
 
     assert bow.vocabulary.centers is not None
-    assert bow.vocabulary.centers.shape == (16, 32)
+    assert bow.vocabulary.centers.shape == (16, 256)
     results = bow.query(50, descriptors, top_k=2)
     assert len(results) == 2
     assert results[0][1] is matching_keyframe
