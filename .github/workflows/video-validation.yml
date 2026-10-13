@@ -1,6 +1,10 @@
-name: Recorded Video Stability Validation
+name: Recorded Driving Sequence Stability Validation
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/video-validation.yml"
   workflow_dispatch:
 
 permissions:
@@ -9,7 +13,7 @@ permissions:
 jobs:
   recorded-video:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -25,71 +29,48 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e ".[dev]"
 
-      - name: Download public recorded video
+      - name: Download continuous KITTI driving sequence
         run: |
-          mkdir -p outputs/input
-          curl --fail --location --retry 3 --retry-delay 2 \
-            https://download.ifi.uzh.ch/rpg/web/data/E2VID/datasets/driving_gen3/external_videos/street1.mp4 \
-            --output outputs/input/street1.mp4
-          test -s outputs/input/street1.mp4
-
-      - name: Build repeatable 1,501-frame stress clip
-        run: |
+          python scripts/download_kitti_subset.py --destination dataset/dataset --sequences 00
           python - <<'PY'
-          import cv2
           from pathlib import Path
-
-          source = Path("outputs/input/street1.mp4")
-          output = Path("outputs/input/street1_1501_frames.avi")
-          target_frames = 1501
-          capture = cv2.VideoCapture(str(source))
-          if not capture.isOpened():
-              raise SystemExit("Could not open downloaded sample video")
-          fps = capture.get(cv2.CAP_PROP_FPS)
-          if not fps or fps <= 0:
-              fps = 25.0
-          writer = None
-          written = 0
-          while written < target_frames:
-              ok, frame = capture.read()
-              if not ok:
-                  capture.release()
-                  capture = cv2.VideoCapture(str(source))
-                  ok, frame = capture.read()
-                  if not ok:
-                      raise SystemExit("Could not rewind sample video")
-              if writer is None:
-                  height, width = frame.shape[:2]
-                  writer = cv2.VideoWriter(
-                      str(output), cv2.VideoWriter_fourcc(*"MJPG"), fps, (width, height)
-                  )
-                  if not writer.isOpened():
-                      raise SystemExit("Could not create repeatable validation clip")
-              writer.write(frame)
-              written += 1
-          capture.release()
-          writer.release()
-          check = cv2.VideoCapture(str(output))
-          actual = int(check.get(cv2.CAP_PROP_FRAME_COUNT))
-          check.release()
-          if actual < target_frames:
-              raise SystemExit(f"Output clip has {actual} frames; expected {target_frames}")
-          print(f"Created {output} with {actual} frames at {fps:.2f} fps")
+          import json
+          root = Path("dataset/dataset")
+          seq = root / "sequences" / "00"
+          images = sorted((seq / "image_0").glob("*.png"))
+          poses = root / "poses" / "00.txt"
+          if len(images) < 1500 or not poses.is_file() or not (seq / "calib.txt").is_file():
+              raise SystemExit("KITTI sequence 00 is incomplete for sustained validation")
+          manifest = {
+              "dataset": "KITTI Odometry sequence 00",
+              "source_frame_count": len(images),
+              "validation_frames": 1500,
+              "ground_truth_pose_count": sum(1 for _ in poses.open()),
+              "continuity": "1500 consecutive original frames; no repeated/looped clip frames"
+          }
+          Path("outputs").mkdir(exist_ok=True)
+          Path("outputs/driving_sequence_manifest.json").write_text(json.dumps(manifest, indent=2))
+          print(json.dumps(manifest, indent=2))
           PY
 
-      - name: Run sustained recorded-video validation
+      - name: Run sustained consecutive-frame validation
         run: |
           python scripts/real_world_validation.py \
-            --source outputs/input/street1_1501_frames.avi \
+            --source dataset/dataset/sequences/00 \
             --frames 1500 \
-            --output-dir outputs/video_validation
+            --output-dir outputs/video_validation \
+            --min-tracking-rate 0.70 \
+            --min-fps 5.0 \
+            --max-slow-frame-rate 0.50 \
+            --max-p95-frame-time-ms 180
 
-      - name: Retain validation report and runtime artifacts
+      - name: Retain report, metrics and trajectories
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: recorded-video-validation-${{ github.run_id }}
+          name: recorded-driving-validation-${{ github.run_id }}
           path: |
+            outputs/driving_sequence_manifest.json
             outputs/video_validation/
           if-no-files-found: warn
           retention-days: 30
