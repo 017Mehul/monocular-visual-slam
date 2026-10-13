@@ -33,6 +33,18 @@ class Trajectory:
         self.poses.append(self.poses[-1] @ np.linalg.inv(T_rel))
         self.frame_ids.append(int(frame_idx) if frame_idx is not None else self.frame_ids[-1] + 1)
 
+    @staticmethod
+    def camera_to_world_from_world_to_camera(R_wc, t_wc):
+        """Convert an optimized world-to-camera pose into stored camera-to-world form."""
+        T_wc = np.eye(4)
+        T_wc[:3, :3] = np.asarray(R_wc, dtype=np.float64).reshape(3, 3)
+        T_wc[:3, 3] = np.asarray(t_wc, dtype=np.float64).reshape(3)
+        return np.linalg.inv(T_wc)
+
+    def set_pose_from_world_to_camera(self, pose_idx, R_wc, t_wc):
+        """Replace one trajectory pose from a world-to-camera estimate (e.g. BA)."""
+        self.poses[pose_idx] = self.camera_to_world_from_world_to_camera(R_wc, t_wc)
+
     def get_latest_pose(self):
         return self.poses[-1].copy()
 
