@@ -63,6 +63,19 @@ jobs:
             --sequences 00 01 02 \
             --output-dir outputs/kitti_benchmark
 
+      - name: Diagnose trajectory drift without loop corrections
+        run: |
+          python scripts/kitti_large_benchmark.py \
+            --dataset-root dataset/dataset \
+            --sequences 01 \
+            --output-dir outputs/kitti_ablation_no_loop \
+            --no-loop-closure
+          python scripts/kitti_large_benchmark.py \
+            --dataset-root dataset/dataset \
+            --sequences 01 \
+            --output-dir outputs/kitti_ablation_no_ba \
+            --no-ba
+
       - name: Evaluate loop-candidate precision and recall on revisiting sequences
         run: |
           python scripts/evaluate_loop_closure.py \
@@ -84,6 +97,8 @@ jobs:
           path: |
             outputs/kitti_dataset_manifest.json
             outputs/kitti_benchmark/
+            outputs/kitti_ablation_no_loop/
+            outputs/kitti_ablation_no_ba/
             outputs/loop_closure_00.json
             outputs/loop_closure_05.json
           if-no-files-found: warn
