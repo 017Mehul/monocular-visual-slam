@@ -16,6 +16,10 @@ class RuntimeMonitor:
         self.window_size = max(1, int(window_size))
         self.max_frame_time_ms = float(max_frame_time_ms)
         self.frame_times_ms = deque(maxlen=self.window_size)
+        self.all_frame_times_ms = []
+        self.total_features = 0
+        self.total_matches = 0
+        self.total_inliers = 0
         self.features = deque(maxlen=self.window_size)
         self.matches = deque(maxlen=self.window_size)
         self.inliers = deque(maxlen=self.window_size)
@@ -32,6 +36,10 @@ class RuntimeMonitor:
         self.failed_frames += int(not tracking_ok)
         self.slow_frames += int(ms > self.max_frame_time_ms)
         self.frame_times_ms.append(ms)
+        self.all_frame_times_ms.append(ms)
+        self.total_features += int(features)
+        self.total_matches += int(matches)
+        self.total_inliers += int(inliers)
         self.features.append(int(features))
         self.matches.append(int(matches))
         self.inliers.append(int(inliers))
@@ -57,7 +65,9 @@ class RuntimeMonitor:
         return float(statistics.quantiles(values, n=100, method="inclusive")[percentile - 1])
 
     def snapshot(self):
-        frame_times = list(self.frame_times_ms)
+        # Acceptance metrics must describe the entire run, not only the last
+        # rolling window (which can hide an earlier slowdown or tracking loss).
+        frame_times = self.all_frame_times_ms
         avg_ms = sum(frame_times) / max(len(frame_times), 1)
         return {
             "frames_observed": self.total_frames,
@@ -69,9 +79,10 @@ class RuntimeMonitor:
             "p95_frame_time_ms": round(self._percentile(frame_times, 95), 3),
             "p99_frame_time_ms": round(self._percentile(frame_times, 99), 3),
             "slow_frame_rate": round(self.slow_frames / max(self.total_frames, 1), 4),
-            "avg_features": round(sum(self.features) / max(len(self.features), 1), 2),
-            "avg_matches": round(sum(self.matches) / max(len(self.matches), 1), 2),
-            "avg_inliers": round(sum(self.inliers) / max(len(self.inliers), 1), 2),
+            "avg_features": round(self.total_features / max(self.total_frames, 1), 2),
+            "avg_matches": round(self.total_matches / max(self.total_frames, 1), 2),
+            "avg_inliers": round(self.total_inliers / max(self.total_frames, 1), 2),
+            "metrics_scope": "entire_run",
             "window_size": self.window_size,
             "max_frame_time_ms": self.max_frame_time_ms,
         }
