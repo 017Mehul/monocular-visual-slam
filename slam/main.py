@@ -400,6 +400,19 @@ def run(args):
 
             previous_pose = trajectory.get_latest_pose()
             trajectory.update(r_mat, t_scaled, frame_idx=frame_idx)
+
+            # Refine the accumulated VO pose against recent 3D map landmarks.
+            # Essential-matrix translation has unknown scale; PnP ties the
+            # current pose to the existing map whenever enough correspondences
+            # are available, while preserving VO as a safe fallback.
+            pnp_R, pnp_t, pnp_inliers = reloc.estimate_pose_from_map(
+                curr_kp, curr_desc, top_k=3
+            )
+            if pnp_R is not None and pnp_t is not None and pnp_inliers >= reloc.min_pnp_inliers:
+                trajectory.set_latest_world_to_camera(pnp_R, pnp_t, frame_idx=frame_idx)
+                LOGGER.debug("[%04d] Refined pose from local map with %d PnP inliers",
+                             frame_idx, pnp_inliers)
+
             current_pose = trajectory.get_latest_pose()
             R_prev_wc, t_prev_wc = trajectory.world_to_camera(previous_pose)
             R_curr_wc, t_curr_wc = trajectory.world_to_camera(current_pose)
