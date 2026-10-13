@@ -66,7 +66,7 @@ def parse_args():
     parser.add_argument("--config-file", type=str, default=None, help="JSON file containing CAMERA_PARAMS and/or PIPELINE_PARAMS overrides")
     parser.add_argument("--calibration", type=str, default=None, help="Camera calibration .npz containing K and dist")
     parser.add_argument("--metrics-file", type=str, default=None, help="Write real-world runtime health metrics JSON")
-    parser.add_argument("--metric-scale-csv", type=str, default=None, help="Optional frame_idx,metric_translation_m CSV for wheel/IMU/GNSS scale")
+    parser.add_argument("--metric-scale-csv", type=str, default=None, help="Optional synchronized frame_idx,metric_delta_m CSV (per-frame displacement in meters)")
     parser.add_argument("--output-dir", type=str, default="outputs/latest_run", help="Directory for logs, summaries, and trajectories")
     parser.add_argument("--save-trajectory", action="store_true", help="Write trajectory positions and full poses into the output directory")
     parser.add_argument("--summary-json", action="store_true", help="Write `run_summary.json` into the output directory")
@@ -227,7 +227,7 @@ def run(args):
         scale_est = ScaleEstimator()
         sensor_scale = SensorScaleProvider(window=20)
         metric_samples = load_metric_scale_csv(args.metric_scale_csv) if args.metric_scale_csv else {}
-        previous_metric_distance = None
+        last_tracking_frame_idx = 0
         reloc = Relocalizer(lost_threshold=PIPELINE_PARAMS.get("tracking_loss_limit", 3))
         ba = BundleAdjuster() if not args.no_ba else None
         runtime_monitor = RuntimeMonitor(window_size=PIPELINE_PARAMS.get("metrics_window", 60), max_frame_time_ms=PIPELINE_PARAMS.get("max_frame_time_ms", 150.0))
@@ -351,14 +351,25 @@ def run(args):
             # Monocular geometry has an arbitrary scale. Keep a consistent
             # internal scale unless an external metric cue is explicitly supplied.
             scale = scale_est.estimate()
-            if metric_samples and frame_idx in metric_samples:
-                metric_distance = metric_samples[frame_idx]
-                if previous_metric_distance is not None:
-                    sensor_value = sensor_scale.update(float(np.linalg.norm(t_vec)), metric_distance - previous_metric_distance)
+            if metric_samples:
+                if frame_idx in metric_samples and last_tracking_frame_idx == frame_idx - 1:
+                    sensor_value = sensor_scale.update(
+                        float(np.linalg.norm(t_vec)), metric_samples[frame_idx]
+                    )
                     if sensor_value is not None:
                         scale_est.set_scale(sensor_value)
                         scale = sensor_value
-                previous_metric_distance = metric_distance
+                    else:
+                        LOGGER.warning(
+                            "[%04d] Ignoring invalid/near-zero synchronized metric motion sample",
+                            frame_idx,
+                        )
+                elif frame_idx in metric_samples:
+                    LOGGER.warning(
+                        "[%04d] Metric scale sample is not aligned with consecutive tracked frames; ignoring",
+                        frame_idx,
+                    )
+            last_tracking_frame_idx = frame_idx
             t_scaled = t_vec * scale
 
             previous_pose = trajectory.get_latest_pose()
