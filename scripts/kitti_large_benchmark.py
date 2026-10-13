@@ -83,6 +83,14 @@ def run_sequence(sequence_dir, gt_file, output_dir, frames, thresholds):
         result.update({"completed": False, "accuracy_passed": None, "status": "FAILED",
                        "stderr_tail": proc.stderr[-2000:]})
         return result
+    summary_file = output_dir / "run_summary.json"
+    run_summary = {}
+    if summary_file.is_file():
+        try:
+            run_summary = json.loads(summary_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            run_summary = {}
+
     est_file = output_dir / "trajectory_poses.csv"
     if not est_file.exists():
         result.update({"completed": False, "accuracy_passed": None, "status": "FAILED",
@@ -134,10 +142,17 @@ def run_sequence(sequence_dir, gt_file, output_dir, frames, thresholds):
     if thresholds["max_rpe_rotation_rmse_deg"] is not None:
         checks["rpe_rotation_rmse_deg"] = rpe_r <= thresholds["max_rpe_rotation_rmse_deg"]
     accuracy_passed = all(checks.values()) if checks else None
+    runtime_metrics = run_summary.get("runtime_validation", {})
     result.update({
         "completed": True,
         "accuracy_passed": accuracy_passed,
         "status": "COMPLETED" if accuracy_passed is not False else "ACCURACY_FAILED",
+        "frames_processed": run_summary.get("frames_processed"),
+        "successful_tracking_frames": run_summary.get("successful_tracking_frames"),
+        "tracking_success_rate": runtime_metrics.get("tracking_success_rate"),
+        "relocalizations": run_summary.get("relocalizations"),
+        "loop_closures": run_summary.get("loop_closures"),
+        "keyframes": run_summary.get("keyframes"),
         "samples": len(common_ids),
         "first_aligned_frame_id": common_ids[0],
         "last_aligned_frame_id": common_ids[-1],
