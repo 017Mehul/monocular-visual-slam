@@ -68,6 +68,41 @@ class Relocalizer:
                        points_3d[:count], R, t)
         )
 
+    def sync_keyframes(self, keyframes):
+        """Refresh database landmarks after local bundle adjustment."""
+        by_frame = {kf.frame_idx: kf for kf in keyframes}
+        for record in self._db:
+            kf = by_frame.get(record.frame_idx)
+            if kf is None:
+                continue
+            count = min(len(kf.descriptors), len(kf.points_3d), len(kf.keypoints))
+            if count < 4:
+                continue
+            record.keypoints = list(kf.keypoints[:count])
+            record.descriptors = np.asarray(kf.descriptors[:count], dtype=np.uint8).copy()
+            record.points_3d = np.asarray(kf.points_3d[:count], dtype=np.float64).copy()
+            record.R = np.asarray(kf.R, dtype=np.float64).copy()
+            record.t = np.asarray(kf.t, dtype=np.float64).reshape(3, 1).copy()
+
+    def apply_world_corrections(self, corrections_by_frame_idx):
+        """Keep all stored relocalization landmarks in the corrected world frame."""
+        for record in self._db:
+            correction = corrections_by_frame_idx.get(record.frame_idx)
+            if correction is None:
+                continue
+            C = np.asarray(correction, dtype=np.float64).reshape(4, 4)
+            T_world_to_camera = np.eye(4)
+            T_world_to_camera[:3, :3] = np.asarray(record.R, dtype=np.float64)
+            T_world_to_camera[:3, 3] = np.asarray(record.t, dtype=np.float64).reshape(3)
+            corrected = T_world_to_camera @ np.linalg.inv(C)
+            record.R = corrected[:3, :3].copy()
+            record.t = corrected[:3, 3].reshape(3, 1).copy()
+            if len(record.points_3d):
+                homogeneous = np.column_stack([
+                    record.points_3d, np.ones(len(record.points_3d))
+                ])
+                record.points_3d = (C @ homogeneous.T).T[:, :3]
+
     def relocalize(self, keypoints, descriptors):
         if descriptors is None or len(self._db) == 0:
             return None, None, False
