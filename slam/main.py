@@ -450,7 +450,7 @@ def run(args):
             if not args.no_loop_closure:
                 loop_det.register_keyframe(frame_idx, trajectory.length() - 1, curr_kp, curr_desc)
                 if frame_idx % loop_every == 0:
-                    found, kf, _, _ = loop_det.detect(frame_idx, curr_kp, curr_desc)
+                    found, kf, R_loop, t_loop = loop_det.detect(frame_idx, curr_kp, curr_desc)
                     if found and kf is not None:
                         current_pose = trajectory.get_latest_pose()
                         candidate_pose = trajectory.poses[kf.pose_idx]
