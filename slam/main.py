@@ -417,10 +417,7 @@ def run(args):
                                 pose_idx = frame_to_pose_idx.get(kf.frame_idx)
                                 if pose_idx is not None:
                                     # BA parameters are world-to-camera; trajectory stores camera-to-world.
-                                    T_wc = np.eye(4)
-                                    T_wc[:3, :3] = R_opt
-                                    T_wc[:3, 3] = np.asarray(t_opt).ravel()
-                                    trajectory.poses[pose_idx] = np.linalg.inv(T_wc)
+                                    trajectory.set_pose_from_world_to_camera(pose_idx, R_opt, t_opt)
                             map_mgr.replace_points(kf_mgr.get_window_points())
                         kf_since_ba = 0
 
