@@ -80,7 +80,7 @@ def main():
             # Evaluate the same configurable top-k retrieval shortlist used by runtime
             # detector. A lower-ranked true revisit should not count as missed
             # solely because a stronger-looking distractor ranks first.
-            ranked = bow.query(frame_idx, descriptors, top_k=5)
+            ranked = bow.query(frame_idx, descriptors, top_k=args.retrieval_top_k)
             eligible = [(score, item) for score, item in ranked if score >= args.similarity_threshold]
             if eligible:
                 best_score, candidate = eligible[0]
@@ -145,7 +145,7 @@ def main():
         "similarity_threshold": args.similarity_threshold,
         **selected_metrics,
         "threshold_sweep": sweep,
-        "retrieval_top_k": 5,
+        "retrieval_top_k": args.retrieval_top_k,
         "protocol_note": "Ground-truth position proximity labels revisits. Precision/recall measure the configured top-k retrieval shortlist; runtime still requires geometric verification, so this is not a full geometric loop-closure evaluation.",
     }
     output = Path(args.output)
