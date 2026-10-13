@@ -88,3 +88,31 @@ def test_loop_detector_checks_next_ranked_candidate_after_geometric_rejection(mo
     assert found
     assert selected is candidates[1]
     assert calls == candidates[:2]
+
+
+
+def test_loop_correction_requires_pose_prior_consistency():
+    from slam.loop_closure import LoopClosureDetector
+
+    candidate = np.eye(4)
+    current = np.eye(4)
+    current[0, 3] = 2.0
+
+    assert LoopClosureDetector.pose_consistent(
+        current, candidate, np.eye(3), np.array([[1.0], [0.0], [0.0]])
+    )
+    # A geometrically plausible match in the opposite direction is not a loop
+    # constraint consistent with the current trajectory.
+    assert not LoopClosureDetector.pose_consistent(
+        current, candidate, np.eye(3), np.array([[-1.0], [0.0], [0.0]])
+    )
+
+    angle = np.deg2rad(45.0)
+    bad_rotation = np.array([
+        [np.cos(angle), -np.sin(angle), 0.0],
+        [np.sin(angle), np.cos(angle), 0.0],
+        [0.0, 0.0, 1.0],
+    ])
+    assert not LoopClosureDetector.pose_consistent(
+        current, candidate, bad_rotation, np.array([[1.0], [0.0], [0.0]])
+    )
