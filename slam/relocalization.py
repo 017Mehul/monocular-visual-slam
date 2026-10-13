@@ -103,6 +103,43 @@ class Relocalizer:
                 ])
                 record.points_3d = (C @ homogeneous.T).T[:, :3]
 
+    def estimate_pose_from_map(self, keypoints, descriptors, top_k=3):
+        """Estimate an absolute world-to-camera pose from recent mapped landmarks.
+
+        Unlike essential-matrix VO, PnP uses already-triangulated 3D landmarks
+        and does not inject an independent unit-translation scale at every
+        frame. The caller should retain its relative-pose estimate as a fallback
+        whenever no candidate has enough geometrically verified inliers.
+        """
+        if descriptors is None or len(self._db) == 0:
+            return None, None, 0
+        best = (None, None, 0)
+        # Prefer recent local-map frames; these generally have better overlap
+        # and less accumulated drift than old place-recognition candidates.
+        for cand in reversed(self._db[-max(1, int(top_k)):]):
+            R, t, ok = self._pnp_verify(keypoints, descriptors, cand)
+            if ok:
+                # Re-run PnP with the inlier set to expose a robust inlier count.
+                good = self._good_matches(descriptors, cand.descriptors)
+                pts_2d, pts_3d = [], []
+                for match in good:
+                    if match.trainIdx < len(cand.points_3d) and match.queryIdx < len(keypoints):
+                        pts_2d.append(keypoints[match.queryIdx].pt)
+                        pts_3d.append(cand.points_3d[match.trainIdx])
+                if len(pts_3d) >= self.min_pnp_inliers:
+                    ok2, rvec, tvec, inliers = cv2.solvePnPRansac(
+                        np.asarray(pts_3d, dtype=np.float64),
+                        np.asarray(pts_2d, dtype=np.float64),
+                        self.K, None, iterationsCount=200,
+                        reprojectionError=3.0, confidence=0.99,
+                        flags=cv2.SOLVEPNP_ITERATIVE,
+                    )
+                    count = int(len(inliers)) if ok2 and inliers is not None else 0
+                    if count > best[2]:
+                        R2, _ = cv2.Rodrigues(rvec) if ok2 else (None, None)
+                        best = (R2, tvec.reshape(3, 1) if ok2 else None, count)
+        return best
+
     def relocalize(self, keypoints, descriptors):
         if descriptors is None or len(self._db) == 0:
             return None, None, False
