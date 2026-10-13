@@ -10,6 +10,7 @@
     "max_map_points": 50000,
     "metrics_window": 60,
     "max_frame_time_ms": 150,
-    "tracking_loss_limit": 3
+    "tracking_loss_limit": 3,
+    "loop_check_every": 30
   }
 }
