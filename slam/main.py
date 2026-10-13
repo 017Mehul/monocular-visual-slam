@@ -309,12 +309,21 @@ def run(args):
                     trajectory.set_latest_world_to_camera(r_rel, t_rel, frame_idx=frame_idx)
                     prev_frame, prev_kp, prev_desc = frame, curr_kp, curr_desc
                     summary["relocalizations"] += 1
-                    LOGGER.info("[%04d] Relocalization succeeded", frame_idx)
+                    summary["successful_tracking_frames"] += 1
+                    runtime_monitor.record(time.time() - t0, n_feat, 0, 0, True)
+                    LOGGER.info("[%04d] Relocalization succeeded; tracking resumes from absolute pose", frame_idx)
+                    # Do not match this frame against itself or run relative
+                    # essential-matrix estimation on a zero-motion pair.
+                    show_frame(frame, viz, stats, display_enabled)
+                    if should_quit(display_enabled):
+                        LOGGER.info("User requested exit")
+                        break
+                    continue
                 else:
                     # Count lost/relocalizing frames too; otherwise runtime
                     # health metrics silently exclude the dominant failure mode.
                     runtime_monitor.record(time.time() - t0, n_feat, 0, 0, False)
-                    LOGGER.warning("[%04d] Relocalization still pending", frame_idx)
+                    LOGGER.warning("[%04d] Relocalization still pending (database=%d)", frame_idx, len(reloc._db))
                     show_frame(frame, viz, stats, display_enabled)
                     if should_quit(display_enabled):
                         LOGGER.info("User requested exit")
