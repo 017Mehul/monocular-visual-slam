@@ -1,4 +1,5 @@
 name: Recorded Driving Sequence Stability Validation
+# Re-run on tracker/relocalizer changes so acceptance is based on the current main branch.
 
 on:
   push:
