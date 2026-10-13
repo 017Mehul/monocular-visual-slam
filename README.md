@@ -10,13 +10,7 @@ Real-time, modular **monocular visual SLAM** pipeline in Python using ORB featur
 
 > Status: research-grade prototype with corrected geometry, explicit monocular scale handling, cross-keyframe BA associations, relocalization, loop detection, automated unit tests, and reproducible evaluation tooling.
 
-> Note: True production-grade SLAM still requires several engineering and validation efforts:
->
-> - Benchmarking (ATE/RPE suites, performance baselining)
-> - Automated regression testing and CI coverage
-> - Sensor fusion for metric scale and robustness (IMU/GNSS integration)
-> - Long-duration validation, memory and latency profiling
-> - Packaging and deployment patterns for reproducible services
+> Validation status: research-grade prototype. The repository contains automated tests, a CI workflow, KITTI evaluation/benchmark tooling, an optional external metric-motion adapter, and long-duration validation scripts. These tools do not by themselves prove benchmark accuracy or real-world stability; those claims require recorded successful runs on the intended datasets and hardware.
 
 ## Demo
 
@@ -65,11 +59,24 @@ slam/
   scale_estimator.py
   bundle_adjustment.py
   loop_closure.py
+  bow_loop_closure.py
   relocalization.py
   trajectory.py
+  sensor_scale.py
+  kitti_evaluation.py
+  runtime_validation.py
   visualization.py
   calibration.py
   kitti_loader.py
+scripts/
+  kitti_batch_evaluation.py
+  kitti_large_benchmark.py
+  real_world_validation.py
+  stress_validation.py
+tests/
+  test_sensor_scale.py
+  test_bow_loop_closure.py
+  test_kitti_large_benchmark.py
 config.production.json
 requirements.txt
 dataset/
@@ -155,6 +162,7 @@ From `slam/main.py`:
 - `--config-file`: load JSON overrides for `CAMERA_PARAMS` / `PIPELINE_PARAMS`
 - `--calibration`: load calibrated camera intrinsics/distortion from `.npz`
 - `--metrics-file`: choose the runtime health metrics JSON path
+- `--metric-scale-csv`: optional synchronized per-frame metric-motion CSV
 - `--output-dir`: choose where logs and artifacts are written
 - `--summary-json`: emit `run_summary.json`
 - `--save-trajectory`: emit `trajectory_positions.csv` and full-pose `trajectory_poses.csv`
@@ -272,23 +280,32 @@ For a quick smoke benchmark, cap each sequence:
 python scripts/kitti_large_benchmark.py --dataset-root dataset/dataset --sequences 00 01 02 --frames 500
 ```
 
-The resulting `benchmark_summary.json` records per-sequence status, sample count, ATE RMSE, translational RPE and rotational RPE. A non-zero exit status indicates that one or more requested sequences failed.
+The resulting `benchmark_summary.json` aligns estimated poses to ground truth by source frame ID, reports sample counts and ATE/RPE, and distinguishes run completion from accuracy acceptance. Each sequence's own `calib.txt` is required and loaded by the runtime. Accuracy thresholds are opt-in; without thresholds, `accuracy_passed` is `null` and `COMPLETED` means only that the run and metric calculation completed—not that the trajectory is accurate.
+
+Optional accuracy gates (choose limits appropriate for your evaluation protocol):
+
+```bash
+python scripts/kitti_large_benchmark.py --dataset-root dataset/dataset --sequences 00 01 02 \
+  --max-ate-rmse-m 5 --max-rpe-translation-rmse-m 1 --max-rpe-rotation-rmse-deg 5
+```
+
+The benchmark returns a non-zero exit code for execution failures, skipped requested sequences, or configured accuracy-gate failures. KITTI results are only meaningful when the dataset is complete and the camera/calibration and evaluation protocol are appropriate.
 
 ## Advanced loop closure
 
 Loop closure now has a self-contained visual vocabulary and TF-IDF Bag-of-Words candidate index for ORB descriptors. It does not require native DBoW2 bindings, which keeps installation portable; the existing Essential-matrix RANSAC stage remains the geometric acceptance gate.
 
-The vocabulary size is configured with `LOOP_CLOSURE_PARAMS.bow_words` in `slam/config.py`.
+The vocabulary size is configured with `LOOP_CLOSURE_PARAMS["bow_words"]` in `slam/config.py`. This is a portable k-means vocabulary over float-converted ORB descriptors, not the native DBoW2 implementation. Geometric verification remains necessary, and precision/recall on a labelled revisit sequence has not been established by unit tests alone.
 
 ## Sensor-based metric scale
 
-Monocular vision alone cannot recover absolute metric scale. The runtime can consume synchronized external metric-motion samples from wheel odometry, an IMU-derived displacement estimate, GNSS, or another calibrated source:
+Monocular vision alone cannot recover absolute metric scale. The runtime can consume synchronized external metric-motion samples from wheel odometry or another calibrated source. The CSV contract is **per-frame displacement**, not cumulative distance: each row's `metric_delta_m` is the displacement in meters from frame `frame_idx - 1` to frame `frame_idx`. Frame IDs must be consecutive within the file, unique, and synchronized to the video/KITTI source. Do not put cumulative odometry distance in this column.
 
 ```text
-frame_idx,metric_translation_m
-100,0.12
-101,0.15
-102,0.18
+frame_idx,metric_delta_m
+1,0.12
+2,0.15
+3,0.18
 ```
 
 Run with:
@@ -297,7 +314,7 @@ Run with:
 python slam/main.py --source 0 --metric-scale-csv sensor_motion.csv --calibration slam/calibration_result.npz
 ```
 
-The `SensorScaleProvider` maintains a robust rolling median of metric/visual translation ratios and updates the monocular scale only when both measurements are valid. This is an integration adapter, not a claim that raw IMU/GNSS data are automatically synchronized or calibrated.
+The `SensorScaleProvider` maintains a robust rolling median of metric/visual translation ratios. Invalid samples are rejected, malformed/non-contiguous CSVs fail at load time, and runtime samples are ignored when tracking skipped a frame so the visual and metric displacements would not describe the same interval. If no valid synchronized sample is available, the previous scale remains in use and a warning is logged. This adapter does not automatically synchronize or calibrate raw IMU/GNSS signals.
 
 ## Current limitations and validation
 
@@ -307,10 +324,10 @@ Known limitations:
 
 - Monocular scale is inherently unobservable from images alone; the default internal scale is arbitrary. Metric scale requires an external cue such as IMU, wheel odometry, GNSS, known baseline, or another calibrated prior.
 - BoW/TF-IDF place recognition is stronger than the original descriptor-mean candidate stage, but learned place recognition or a native DBoW2/ORB-SLAM vocabulary may still improve very large environments.
-- KITTI evaluation and multi-sequence benchmark sweeps are explicit offline steps; dataset downloads are intentionally not part of CI.
+- KITTI evaluation and multi-sequence benchmark sweeps are explicit offline steps; dataset downloads are intentionally not part of CI. No benchmark accuracy is claimed until measured results are retained.
 - Long-duration profiling and target-hardware real-time validation still need to be performed on target machines.
 
-The repository now includes unit coverage for coordinate-frame conversion, triangulation alignment, landmark/observation indexing, scale-policy behavior, trajectory evaluation, and runtime latency metrics. Batch KITTI evaluation and long-duration stress validation are also provided as repeatable scripts. CI runs syntax checks, linting, evaluation CLI validation, and pytest. Real-camera validation is intentionally a hardware-dependent run rather than a CI test.
+The repository includes regression tests for coordinate-frame conversion, triangulation alignment, landmark/observation indexing, synthetic metric-scale recovery, BoW vocabulary training/ranking, trajectory frame IDs, benchmark alignment, and loop-correction consistency. The CI workflow defines syntax checks, linting, evaluation CLI validation, and pytest; the live Actions status must be checked separately. KITTI accuracy, labelled loop precision/recall, and real-camera stability remain data-/hardware-dependent acceptance gates.
 
 For a real deployment, validate camera calibration, lighting/motion conditions, CPU/GPU load, memory growth, tracking-loss recovery, and trajectory drift on the target camera and hardware before relying on the output for navigation.
 
