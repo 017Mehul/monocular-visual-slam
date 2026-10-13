@@ -445,6 +445,9 @@ def run(args):
                                     # BA parameters are world-to-camera; trajectory stores camera-to-world.
                                     trajectory.set_pose_from_world_to_camera(pose_idx, R_opt, t_opt)
                             map_mgr.replace_points(kf_mgr.get_window_points())
+                            # The relocalizer owns a separate landmark database;
+                            # refresh its active keyframes after BA changes poses/points.
+                            reloc.sync_keyframes(kf_mgr.keyframes)
                         kf_since_ba = 0
 
             if not args.no_loop_closure:
@@ -473,6 +476,10 @@ def run(args):
                                 for pose_idx, pose_correction in correction_by_pose.items()
                             }
                             kf_mgr.apply_world_corrections(frame_corrections)
+                            # Loop closure changes the world frame of the trajectory.
+                            # Apply the same per-frame transform to the independent
+                            # relocalization database or PnP recovery will jump to stale poses.
+                            reloc.apply_world_corrections(frame_corrections)
                             map_mgr.replace_points(kf_mgr.get_window_points())
                             summary["loop_closures"] += 1
                             LOGGER.info("[%04d] Consistent loop closure applied", frame_idx)
