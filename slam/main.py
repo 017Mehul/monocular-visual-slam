@@ -67,6 +67,7 @@ def parse_args():
     parser.add_argument("--headless", action="store_true", help="Disable all GUI windows and render loops")
     parser.add_argument("--no-ba", action="store_true", help="Disable bundle adjustment for lower latency")
     parser.add_argument("--no-loop-closure", action="store_true", help="Disable loop-candidate detection/corrections for controlled ablation runs")
+    parser.add_argument("--no-map-pnp", action="store_true", help="Disable local-map PnP refinement for controlled trajectory ablation")
     parser.add_argument("--max-frames", type=int, default=None, help="Stop after processing this many frames")
     parser.add_argument("--config-file", type=str, default=None, help="JSON file containing CAMERA_PARAMS and/or PIPELINE_PARAMS overrides")
     parser.add_argument("--calibration", type=str, default=None, help="Camera calibration .npz containing K and dist")
@@ -410,9 +411,12 @@ def run(args):
             # Essential-matrix translation has unknown scale; PnP ties the
             # current pose to the existing map whenever enough correspondences
             # are available, while preserving VO as a safe fallback.
-            pnp_R, pnp_t, pnp_inliers = reloc.estimate_pose_from_map(
-                curr_kp, curr_desc, top_k=3
-            )
+            if args.no_map_pnp:
+                pnp_R, pnp_t, pnp_inliers = None, None, 0
+            else:
+                pnp_R, pnp_t, pnp_inliers = reloc.estimate_pose_from_map(
+                    curr_kp, curr_desc, top_k=3
+                )
             if pnp_R is not None and pnp_t is not None and pnp_inliers >= reloc.min_pnp_inliers:
                 T_pnp_wc = np.eye(4)
                 T_pnp_wc[:3, :3] = pnp_R
