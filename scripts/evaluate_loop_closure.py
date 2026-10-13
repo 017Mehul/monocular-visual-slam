@@ -125,7 +125,7 @@ def main():
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(result, indent=2), encoding="utf-8")
     print(json.dumps(result, indent=2))
-    return 0 if bow.keyframes and queries else 2
+    return 0 if bow.keyframes and selected_metrics["positive_revisit_queries"] else 2
 
 
 if __name__ == "__main__":
