@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from slam.kitti_evaluation import compute_ate, read_kitti_poses
+from slam.kitti_loader import load_kitti_calib
 
 
 def read_estimated_pose_rows(path):
@@ -62,6 +63,15 @@ def run_sequence(sequence_dir, gt_file, output_dir, frames, thresholds):
     if not calibration_file.is_file():
         return {"sequence": sequence_dir.name, "completed": False, "accuracy_passed": None,
                 "status": "FAILED", "error": "sequence-specific calib.txt is missing"}
+    try:
+        calibration = load_kitti_calib(str(sequence_dir))
+        if not all(np.isfinite(calibration[key]) for key in ("fx", "fy", "cx", "cy")):
+            raise ValueError("calibration contains non-finite intrinsics")
+        if calibration["fx"] <= 0 or calibration["fy"] <= 0:
+            raise ValueError("calibration focal lengths must be positive")
+    except (OSError, ValueError, IndexError) as exc:
+        return {"sequence": sequence_dir.name, "completed": False, "accuracy_passed": None,
+                "status": "FAILED", "error": f"invalid sequence calibration: {exc}"}
     cmd = [sys.executable, "slam/main.py", "--source", str(sequence_dir),
            "--headless", "--no-viz", "--save-trajectory", "--summary-json",
            "--output-dir", str(output_dir)]
