@@ -116,6 +116,10 @@ class Relocalizer:
             R, t, count = self._pnp_pose(keypoints, descriptors, cand)
             if count > best_count:
                 best_R, best_t, best_count = R, t, count
+            # A strong recent-frame solution is already well constrained; avoid
+            # extra descriptor matching against older keyframes on every frame.
+            if best_count >= max(30, 2 * self.min_pnp_inliers):
+                break
         return best_R, best_t, best_count
     def relocalize(self, keypoints, descriptors):
         if descriptors is None or len(self._db) == 0:
