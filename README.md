@@ -329,7 +329,7 @@ Loop closure now has a self-contained visual vocabulary and TF-IDF Bag-of-Words 
 
 The vocabulary size is configured with `LOOP_CLOSURE_PARAMS["bow_words"]` in `slam/config.py`. The portable vocabulary clusters unpacked ORB bits so the distance approximates Hamming distance; it is not the native DBoW2 implementation. Geometric verification remains necessary.
 
-Measure candidate retrieval against KITTI ground-truth position revisits (the sequence must actually contain revisits under the chosen radius/separation protocol):
+Runtime now retrieves a top-10 candidate shortlist (up from five) and attempts candidates in score order; the Essential-matrix geometric verifier remains mandatory before a correction is accepted. Measure candidate retrieval against KITTI ground-truth position revisits (the sequence must actually contain revisits under the chosen radius/separation protocol):
 
 ```bash
 python scripts/evaluate_loop_closure.py --sequence dataset/dataset/sequences/00 \
