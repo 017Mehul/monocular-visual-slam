@@ -37,8 +37,8 @@ jobs:
         run: |
           mkdir -p outputs/input
           curl --fail --location --retry 3 --retry-delay 2 \
-            https://raw.githubusercontent.com/opencv/opencv/4.x/samples/data/vtest.avi \
-            --output outputs/input/vtest.avi
+            https://download.ifi.uzh.ch/rpg/web/data/E2VID/datasets/driving_gen3/external_videos/street1.mp4 \
+            --output outputs/input/street1.mp4
           test -s outputs/input/vtest.avi
 
       - name: Build repeatable 1,500-frame stress clip
@@ -48,8 +48,8 @@ jobs:
           from pathlib import Path
 
           source = Path("outputs/input/vtest.avi")
-          output = Path("outputs/input/vtest_1500_frames.avi")
-          target_frames = 1500
+          output = Path("outputs/input/street1_1501_frames.avi")
+          target_frames = 1501
           capture = cv2.VideoCapture(str(source))
           if not capture.isOpened():
               raise SystemExit("Could not open downloaded sample video")
