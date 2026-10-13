@@ -217,7 +217,7 @@ def run(args):
 
     cap = None
     viz = None
-    summary = {"source": args.source, "scale": args.scale, "headless": args.headless, "bundle_adjustment": not args.no_ba, "output_dir": str(output_dir), "start_time_epoch": time.time(), "frames_processed": 0, "successful_tracking_frames": 0, "skipped_feature_frames": 0, "skipped_match_frames": 0, "skipped_inlier_frames": 0, "relocalizations": 0, "loop_closures": 0, "keyframes": 0, "final_map_points": 0, "total_map_points_added": 0, "avg_fps_estimate": 0.0, "runtime_validation": {}}
+    summary = {"source": args.source, "scale": args.scale, "headless": args.headless, "bundle_adjustment": not args.no_ba, "output_dir": str(output_dir), "start_time_epoch": time.time(), "frames_processed": 0, "successful_tracking_frames": 0, "skipped_feature_frames": 0, "skipped_match_frames": 0, "skipped_inlier_frames": 0, "relocalizations": 0, "loop_closures": 0, "keyframes": 0, "active_ba_keyframes": 0, "loop_database_keyframes": 0, "final_map_points": 0, "total_map_points_added": 0, "avg_fps_estimate": 0.0, "runtime_validation": {}}
 
     try:
         cap = open_source(args.source, args.width, args.height, scale=args.scale)
@@ -472,7 +472,9 @@ def run(args):
             stats["fps"] = fps
             stats["ba_window"] = len(kf_mgr.get_window_poses()) if kf_mgr.size() > 0 else 0
             summary["avg_fps_estimate"] = fps
-            summary["keyframes"] = kf_mgr.size()
+            summary["keyframes"] = kf_mgr.total_inserted
+            summary["active_ba_keyframes"] = kf_mgr.size()
+            summary["loop_database_keyframes"] = len(loop_det.keyframes)
             summary["final_map_points"] = map_mgr.size()
             summary["total_map_points_added"] = map_mgr.total_added
 
