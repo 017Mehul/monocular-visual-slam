@@ -22,6 +22,10 @@ def test_estimated_pose_csv_preserves_source_frame_ids(tmp_path):
 def test_rpe_only_uses_adjacent_frame_ids():
     gt = np.repeat(np.eye(4)[None, :, :], 3, axis=0)
     est = gt.copy()
+    # Frames 2 and 3 share the same offset. Comparing frame 0 directly to
+    # frame 2 would report error, but that pair is not adjacent and must skip.
+    est[1, 0, 3] = 10.0
+    est[2, 0, 3] = 10.0
     ids = [0, 2, 3]
     trans, rot = aligned_rpe(gt, est, ids, delta=1)
     assert trans == 0.0
