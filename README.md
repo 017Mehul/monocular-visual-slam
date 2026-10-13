@@ -257,7 +257,22 @@ A 1,500-consecutive-frame KITTI sequence-00 stability run passed the configured 
 
 This runtime result predates the latest local-map PnP refinement. The refinement is covered by a synthetic known-pose regression test, and a fresh runtime/trajectory benchmark is required before claiming that it improves end-to-end accuracy. Do not interpret runtime stability as proof of trajectory accuracy.
 
-The current multi-sequence KITTI workflow reports frame-aligned ATE, translation RPE, rotation RPE, and loop-retrieval metrics. Treat these as the source of truth for accuracy claims; historical values should not be presented as current results.
+The multi-sequence KITTI workflow now records frame-aligned ATE, translation RPE, rotation RPE, tracking success, average/P95/P99 frame latency, and loop-retrieval metrics. It runs a controlled local-map-PnP-off ablation and fails the final CI acceptance gate when any requested sequence misses a configured accuracy or runtime threshold. A completed process is not considered a passing benchmark.
+
+### Trajectory-corruption baseline and acceptance policy
+
+The last retained pre-safeguard benchmark (commit `150c7014726684e6682d7929b60076d4e7ba9b8c`) exposed severe trajectory corruption:
+- Mean ATE RMSE: **189.24 m**
+- Mean translation RPE RMSE: **26.58 m**
+- Mean rotation RPE RMSE: **3.50°**
+- Sequence 00 contained an approximately **860-unit single-frame position jump**; sequence 02 contained an approximately **711-unit jump**.
+- The separate 1,500-frame stability run reported 99.07% tracking success, 9.37 effective FPS, and 132.36 ms P95 latency. These runtime values do not establish trajectory accuracy.
+
+These are **historical baseline values**, not results for the safeguarded code. The current CI workflow uses initial release gates of ATE RMSE <= 25 m, translation RPE RMSE <= 5 m, rotation RPE RMSE <= 5°, tracking success >= 90%, and P95 frame latency <= 250 ms for each requested sequence. They are conservative engineering gates, not a claim that the project meets research-grade odometry accuracy. A failed gate must remain visible until the trajectory is fixed and the full benchmark passes.
+
+PnP candidates are now checked for rigid-pose validity, rotation agreement, and translation innovation against a robust recent-motion estimate. BA outputs are checked for finite rigid poses and newly introduced isolated adjacent-keyframe baseline jumps before shared state is mutated. Loop-closure corrections are checked for valid rigid transforms and the corrected trajectory is validated before keyframes and landmark databases are changed. Logs identify accepted/rejected updates by source (`PNP_CANDIDATE`, `POSE_UPDATE`, `BA_UPDATE`, `LOOP_UPDATE`) and include frame IDs and geometric diagnostics.
+
+The CI artifact retains full trajectories, run summaries, logs, per-sequence metrics, loop retrieval results, and the PnP-off ablation. Review the trajectory CSVs and source-specific logs when a gate fails; do not loosen the thresholds just to turn CI green.
 
 ## Troubleshooting
 
