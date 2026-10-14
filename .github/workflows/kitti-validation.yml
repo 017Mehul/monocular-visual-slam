@@ -98,12 +98,12 @@ jobs:
           python scripts/evaluate_loop_closure.py \
             --sequence dataset/dataset/sequences/00 \
             --ground-truth dataset/dataset/poses/00.txt \
-            --frame-stride 10 --min-separation-frames 100 --revisit-radius-m 5 --similarity-threshold 0.80 \
+            --frame-stride 10 --min-separation-frames 100 --revisit-radius-m 5 --similarity-threshold 0.85 \
             --output outputs/loop_closure_00.json
           python scripts/evaluate_loop_closure.py \
             --sequence dataset/dataset/sequences/05 \
             --ground-truth dataset/dataset/poses/05.txt \
-            --frame-stride 10 --min-separation-frames 100 --revisit-radius-m 5 --similarity-threshold 0.80 \
+            --frame-stride 10 --min-separation-frames 100 --revisit-radius-m 5 --similarity-threshold 0.85 \
             --output outputs/loop_closure_05.json
 
       - name: Compare trajectory with map PnP enabled
