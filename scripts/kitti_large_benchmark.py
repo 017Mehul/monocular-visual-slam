@@ -57,7 +57,7 @@ def aligned_rpe(gt_poses, est_poses, frame_ids, delta=1):
     return float(np.sqrt(np.mean(trans_sq))), float(np.sqrt(np.mean(rot_sq)))
 
 
-def run_sequence(sequence_dir, gt_file, output_dir, frames, thresholds, no_ba=False, no_loop_closure=False, no_map_pnp=False, enable_ba=False):
+def run_sequence(sequence_dir, gt_file, output_dir, frames, thresholds, no_ba=False, no_loop_closure=False, no_map_pnp=False, enable_ba=False, enable_map_pnp=False):
     output_dir.mkdir(parents=True, exist_ok=True)
     calibration_file = sequence_dir / "calib.txt"
     if not calibration_file.is_file():
@@ -85,6 +85,8 @@ def run_sequence(sequence_dir, gt_file, output_dir, frames, thresholds, no_ba=Fa
         cmd.append("--no-loop-closure")
     if no_map_pnp:
         cmd.append("--no-map-pnp")
+    elif enable_map_pnp:
+        cmd.append("--enable-map-pnp")
     proc = subprocess.run(cmd, text=True, capture_output=True)
     result = {"sequence": sequence_dir.name, "return_code": proc.returncode}
     if proc.returncode != 0:
@@ -213,7 +215,8 @@ def main():
     p.add_argument("--no-ba", action="store_true", help="Disable bundle adjustment for an ablation run")
     p.add_argument("--enable-ba", action="store_true", help="Enable experimental bundle adjustment for an ablation run")
     p.add_argument("--no-loop-closure", action="store_true", help="Disable loop corrections for an ablation run")
-    p.add_argument("--no-map-pnp", action="store_true", help="Disable local-map PnP refinement for an ablation run")
+    p.add_argument("--no-map-pnp", action="store_true", help="Compatibility flag to disable local-map PnP refinement")
+    p.add_argument("--enable-map-pnp", action="store_true", help="Enable local-map PnP refinement for an ablation run")
     args = p.parse_args()
     for name in ("max_ate_rmse_m", "max_rpe_translation_rmse_m", "max_rpe_rotation_rmse_deg", "max_p95_frame_time_ms"):
         value = getattr(args, name)
@@ -241,7 +244,7 @@ def main():
                       "status": "SKIPPED", "error": "missing sequence or ground truth"}
         else:
             print(f"[benchmark] running KITTI {seq}")
-            result = run_sequence(seq_dir, gt_file, Path(args.output_dir) / seq, args.frames, thresholds, args.no_ba, args.no_loop_closure, args.no_map_pnp, args.enable_ba)
+            result = run_sequence(seq_dir, gt_file, Path(args.output_dir) / seq, args.frames, thresholds, args.no_ba, args.no_loop_closure, args.no_map_pnp, args.enable_ba, args.enable_map_pnp)
         results.append(result)
         print(json.dumps(result))
         if args.fail_fast and result["status"] in ("FAILED", "ACCURACY_FAILED", "SKIPPED"):
