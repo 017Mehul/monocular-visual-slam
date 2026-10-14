@@ -106,14 +106,14 @@ jobs:
             --frame-stride 10 --min-separation-frames 100 --revisit-radius-m 5 --similarity-threshold 0.80 \
             --output outputs/loop_closure_05.json
 
-      - name: Compare trajectory with PnP disabled
+      - name: Compare trajectory with map PnP enabled
         continue-on-error: true
         run: |
           python scripts/kitti_large_benchmark.py \
             --dataset-root dataset/dataset \
             --sequences 00 \
-            --output-dir outputs/kitti_ablation_no_map_pnp \
-            --no-map-pnp
+            --output-dir outputs/kitti_ablation_map_pnp_enabled \
+            --enable-map-pnp
 
       - name: Enforce accuracy and runtime acceptance thresholds
         if: always()
@@ -160,7 +160,7 @@ jobs:
             outputs/kitti_benchmark/
             outputs/kitti_ablation_no_loop/
             outputs/kitti_ablation_with_ba/
-            outputs/kitti_ablation_no_map_pnp/
+            outputs/kitti_ablation_map_pnp_enabled/
             outputs/loop_closure_00.json
             outputs/loop_closure_05.json
           if-no-files-found: warn
