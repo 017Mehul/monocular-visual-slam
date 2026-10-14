@@ -55,10 +55,14 @@ def test_loop_evaluation_recovers_known_synthetic_revisits(tmp_path, monkeypatch
     result = json.loads(output.read_text(encoding="utf-8"))
     assert result["positive_revisit_queries"] == 2
     assert result["true_positives"] == 2
-    assert result["false_positives"] == 0
+    # Candidate-level scoring counts a retrieved distractor as a false positive
+    # instead of hiding it inside a query-level "hit".
+    assert result["false_positives"] == 1
     assert result["false_negatives"] == 0
-    assert result["precision"] == 1.0
+    assert result["precision"] == 2 / 3
     assert result["recall"] == 1.0
+    assert result["retrieved_candidates"] == 3
+    assert result["relevant_candidates"] == 2
 
 
 def test_loop_detector_checks_next_ranked_candidate_after_geometric_rejection(monkeypatch):
