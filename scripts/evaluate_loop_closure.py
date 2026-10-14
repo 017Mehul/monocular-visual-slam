@@ -116,19 +116,18 @@ def main():
                 frame_id for frame_id, score in zip(candidate_ids, candidate_scores)
                 if score is not None and score >= threshold
             ]
-            accepted = bool(accepted_ids)
-            known = observation["known_revisits"]
-            if known:
+            retrieved = set(accepted_ids)
+            relevant = set(observation["known_revisits"])
+            if relevant:
                 queries += 1
-                if accepted and any(frame_id in known for frame_id in accepted_ids):
-                    tp += 1
-                else:
-                    if accepted:
-                        fp += 1
-                    fn += 1
-            elif accepted:
-                fp += 1
+            # Candidate-level precision/recall: each retrieved keyframe is one
+            # decision. A query with one true candidate and nine distractors
+            # must not be counted as a perfect true positive.
+            tp += len(retrieved & relevant)
+            fp += len(retrieved - relevant)
+            fn += len(relevant - retrieved)
         return {"threshold": threshold, "positive_revisit_queries": queries,
+                "retrieved_candidates": tp + fp, "relevant_candidates": tp + fn,
                 **precision_recall(tp, fp, fn)}
 
     selected_metrics = metrics_at(args.similarity_threshold)
