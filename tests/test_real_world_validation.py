@@ -31,8 +31,6 @@ def test_validation_runner_retains_failure_report_when_pipeline_raises(tmp_path,
 
 
 def test_validation_runner_supplies_all_pipeline_flags(tmp_path, monkeypatch):
-    import pytest
-
     monkeypatch.setattr(
         sys,
         "argv",
