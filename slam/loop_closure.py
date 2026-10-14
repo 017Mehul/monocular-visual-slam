@@ -70,8 +70,8 @@ class LoopClosureDetector:
 
     @staticmethod
     def pose_consistent(current_pose, candidate_pose, relative_R, relative_t,
-                        max_rotation_error_deg=20.0,
-                        min_translation_direction_cosine=0.5):
+                        max_rotation_error_deg=12.0,
+                        min_translation_direction_cosine=0.85):
         """Reject geometrically verified matches that contradict the VO pose prior.
 
         Essential-matrix verification alone can accept repeated textures. Compare
