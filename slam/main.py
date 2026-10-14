@@ -69,7 +69,8 @@ def parse_args():
     parser.add_argument("--no-ba", action="store_true", help="Compatibility flag: keep bundle adjustment disabled")
     parser.add_argument("--enable-ba", action="store_true", help="Enable experimental local bundle adjustment; disabled by default until KITTI drift is resolved")
     parser.add_argument("--no-loop-closure", action="store_true", help="Disable loop-candidate detection/corrections for controlled ablation runs")
-    parser.add_argument("--no-map-pnp", action="store_true", help="Disable local-map PnP refinement for controlled trajectory ablation")
+    parser.add_argument("--enable-map-pnp", action="store_true", help="Enable experimental local-map PnP refinement; disabled by default because KITTI ablation showed worse ATE")
+    parser.add_argument("--no-map-pnp", action="store_true", help="Compatibility flag to disable local-map PnP refinement")
     parser.add_argument("--max-frames", type=int, default=None, help="Stop after processing this many frames")
     parser.add_argument("--config-file", type=str, default=None, help="JSON file containing CAMERA_PARAMS and/or PIPELINE_PARAMS overrides")
     parser.add_argument("--calibration", type=str, default=None, help="Camera calibration .npz containing K and dist")
@@ -437,7 +438,7 @@ def run(args):
             # Essential-matrix translation has unknown scale; PnP ties the
             # current pose to the existing map whenever enough correspondences
             # are available, while preserving VO as a safe fallback.
-            if getattr(args, "no_map_pnp", False):
+            if getattr(args, "no_map_pnp", False) or not getattr(args, "enable_map_pnp", False):
                 pnp_R, pnp_t, pnp_inliers = None, None, 0
             else:
                 pnp_R, pnp_t, pnp_inliers = reloc.estimate_pose_from_map(
